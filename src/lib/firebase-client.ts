@@ -1,5 +1,5 @@
 import { getApp, getApps, initializeApp, type FirebaseOptions } from "firebase/app";
-import { getAuth, getRedirectResult, GoogleAuthProvider, signInWithRedirect } from "firebase/auth";
+import { getAuth, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signInWithRedirect } from "firebase/auth";
 
 const config: FirebaseOptions = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -30,8 +30,29 @@ export async function startGoogleSignIn() {
 
 export async function getGoogleRedirectToken() {
   const app = getFirebaseApp();
-  const result = await getRedirectResult(getAuth(app));
-  return result?.user.getIdToken() ?? null;
+  const auth = getAuth(app);
+  try {
+    const result = await getRedirectResult(auth);
+    if (result?.user) return result.user.getIdToken();
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("auth/no-auth-event")) throw error;
+  }
+  if (auth.currentUser) return auth.currentUser.getIdToken();
+  return new Promise<string | null>((resolve) => {
+    let settled = false;
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (settled) return;
+      settled = true;
+      unsubscribe();
+      resolve(user ? user.getIdToken() : null);
+    });
+    window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      unsubscribe();
+      resolve(null);
+    }, 5000);
+  });
 }
 
 export async function getCurrentFirebaseUserToken() {
