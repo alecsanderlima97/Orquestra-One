@@ -35,7 +35,8 @@ export type SupplierRecord = {
   tone: string;
 };
 
-export type AppointmentRecord = (typeof appointments)[number] & { clientId: string; date: string; notes: string; workOrderId?: string };
+export type AppointmentCadence = "single" | "daily" | "weekdays" | "weekly";
+export type AppointmentRecord = (typeof appointments)[number] & { clientId: string; date: string; endDate?: string; cadence?: AppointmentCadence; seriesId?: string; notes: string; workOrderId?: string };
 export type DescriptionRevision = { id: string; text: string; createdAt: string };
 export type WorkOrderRecord = (typeof workOrders)[number] & { clientId: string; description: string; descriptionHistory?: DescriptionRevision[]; diary: Array<{ id: string; text: string; createdAt: string }>; materialLines: Array<{ stockId: string; quantity: number }> };
 export type FinanceRecord = (typeof financeItems)[number] & { originId?: string; category: string; paidAt?: string };
@@ -58,6 +59,7 @@ type DemoActions = {
   addClient: (record: Omit<ClientRecord, "id" | "detail" | "initials" | "tone" | "history">) => void;
   addSupplier: (record: Omit<SupplierRecord, "id" | "initials" | "tone">) => void;
   addAppointment: (record: Omit<AppointmentRecord, "id" | "status">) => void;
+  addAppointments: (records: Array<Omit<AppointmentRecord, "id" | "status">>) => void;
   addWorkOrder: (record: Omit<WorkOrderRecord, "id" | "status" | "updatedAt" | "diary" | "materialLines"> & { materialLines?: WorkOrderRecord["materialLines"] }) => string;
   addFinance: (record: Omit<FinanceRecord, "id" | "status">) => void;
   addStock: (record: Omit<StockRecord, "id">) => void;
@@ -68,14 +70,14 @@ type DemoActions = {
   addTeamMember: (record: Omit<TeamRecord, "id" | "initials" | "tone">) => void;
 };
 
-const storageKey = "orquestra-one-demo-v4";
+const storageKey = "orquestra-one-demo-v5";
 const tones = ["mint", "blue", "sand", "rose", "violet"];
 
 function buildInitialState(): DemoState {
   return {
     clients: clients.map((client, index) => ({ ...client, kind: "pf", document: "", email: `${client.name.toLowerCase().replace(/\\s+/g, ".")}@exemplo.com`, phone: ["(15) 99847-8705", "(15) 99711-2400", "(15) 99620-1188", "(15) 99140-2233"][index] ?? "", city: "Sorocaba", state: "SP", address: "", cep: "", history: [client.detail], tone: client.tone ?? tones[index % tones.length] })),
     suppliers: suppliers.map((supplier, index) => ({ ...supplier, document: "", email: "", state: "SP", address: "", cep: "", tone: supplier.tone ?? tones[index % tones.length] })),
-    appointments: appointments.map((appointment, index) => ({ ...appointment, clientId: `cl-${Math.min(index + 1, 4)}`, date: "2026-10-29", notes: "", workOrderId: ["OS-00128", "OS-00126", "OS-00127", ""][index] || undefined })),
+    appointments: appointments.map((appointment, index) => ({ ...appointment, clientId: `cl-${Math.min(index + 1, 4)}`, date: "2026-10-29", endDate: "2026-10-29", cadence: "single", notes: "", workOrderId: ["OS-00128", "OS-00126", "OS-00127", ""][index] || undefined })),
     workOrders: workOrders.map((order, index) => ({ ...order, clientId: `cl-${Math.min(index + 1, 4)}`, description: order.service, descriptionHistory: [{ id: `desc-${order.id}`, text: order.service, createdAt: "Descrição inicial" }], diary: [], materialLines: [] })),
     finance: financeItems.map((item) => ({
       ...item,
@@ -124,6 +126,7 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
     addClient: (record) => setState((previous) => ({ ...previous, clients: [{ ...record, id: id("cl"), detail: "Novo cadastro", initials: initials(record.name), tone: tones[previous.clients.length % tones.length], history: ["Cadastro criado agora"] }, ...previous.clients] })),
     addSupplier: (record) => setState((previous) => ({ ...previous, suppliers: [{ ...record, id: id("fo"), initials: initials(record.name), tone: tones[previous.suppliers.length % tones.length] }, ...previous.suppliers] })),
     addAppointment: (record) => setState((previous) => ({ ...previous, appointments: [{ ...record, id: id("ag"), status: "pending" }, ...previous.appointments] })),
+    addAppointments: (records) => setState((previous) => ({ ...previous, appointments: [...records.map((record) => ({ ...record, id: id("ag"), status: "pending" as const })), ...previous.appointments] })),
     addWorkOrder: (record) => {
       const nextId = `OS-${String(129 + state.workOrders.length).padStart(5, "0")}`;
       setState((previous) => ({ ...previous, workOrders: [{ ...record, id: nextId, status: "in_progress", updatedAt: "Criada agora", descriptionHistory: [{ id: id("desc"), text: record.description, createdAt: "Descrição inicial" }], diary: [], materialLines: record.materialLines ?? [] }, ...previous.workOrders] }));

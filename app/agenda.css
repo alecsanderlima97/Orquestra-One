@@ -139,3 +139,31 @@
   .agenda-weekday-row, .agenda-month-grid { min-width: 560px; }
   .agenda-month-cell { min-height: 78px; padding: 6px; }
 }
+
+/* A semana é o carrossel principal: horas no eixo vertical e dias no eixo horizontal. */
+.agenda-week-grid { grid-template-columns: 56px repeat(7, minmax(112px, 1fr)); min-width: 850px; }
+.agenda-week-axis { background: #fafbfc; }
+.agenda-week-axis-head { min-height: 56px; box-sizing: border-box; display: flex; align-items: flex-end; padding: 0 7px 10px; color: #a0aab5; font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.agenda-week-hour { height: 66px; box-sizing: border-box; border-top: 1px solid #edf0f4; padding: 10px 6px; color: #9aa5b3; font-size: 8px; }
+.agenda-week-column { min-height: 0; }
+.agenda-week-day { min-height: 56px; box-sizing: border-box; }
+.agenda-week-column-body { min-height: 0; display: grid; grid-template-rows: repeat(13, 66px); gap: 0; padding: 0; background: transparent; }
+.agenda-week-time-slot { min-width: 0; min-height: 66px; box-sizing: border-box; border-top: 1px solid #f0f2f5; padding: 7px; background: repeating-linear-gradient(to bottom, transparent 0, transparent 31px, rgba(244,246,248,.7) 32px); }
+.agenda-week-time-slot .agenda-appointment-card { min-height: 47px; }
+.agenda-professional-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: #84918a; font-size: 8px; }
+.agenda-professional-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.agenda-professional-dot { width: 7px; height: 7px; display: inline-block; flex: 0 0 7px; border-radius: 50%; }
+.agenda-card-time .agenda-professional-dot { margin-right: 4px; }
+.agenda-professional-mint { background: #4fac78; }
+.agenda-professional-blue { background: #6e9cc7; }
+.agenda-professional-violet { background: #9279c4; }
+.agenda-professional-amber { background: #d59c4c; }
+.agenda-professional-rose { background: #c77d8c; }
+.agenda-month-item .agenda-professional-dot { margin-right: 4px; vertical-align: -1px; }
+
+@media (max-width: 760px) {
+  .agenda-week-grid { min-width: 850px; }
+  .agenda-week-axis-head { padding-left: 5px; }
+  .agenda-week-hour { padding-left: 5px; }
+  .agenda-professional-legend { order: 3; }
+}
