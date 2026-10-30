@@ -6,7 +6,7 @@ O One não deve criar uma segunda base de empresas, planos, cobrança ou `access
 
 1. A Central Admin cria o convite do proprietário, vinculado ao tenant do Portal e com expiração.
 2. O proprietário entra pelo Google e o servidor valida o token Firebase.
-3. O servidor consulta o gateway do Portal para validar convite ativo, tenant e papel. Nenhum desses valores pode vir do navegador.
+3. O servidor consulta `users/{uid}`, `companies/{tenantId}` e `invitations` no mesmo projeto Firebase do Portal. Nenhum tenant ou papel é aceito diretamente do navegador.
 4. A sessão é criada em cookie `HttpOnly`, `Secure` e `SameSite=Lax`.
 5. Um proprietário ou administrador autorizado cria convites de equipe. O servidor limita o convite ao tenant do criador e à allowlist de permissões.
 
@@ -23,4 +23,4 @@ Cada registro precisa ter `tenantId`, `createdBy`, `updatedAt` e evento de audit
 
 ## O que falta configurar fora do código
 
-Preencher as variáveis de Firebase na Vercel e disponibilizar um gateway autenticado no Portal que retorne `allowed`, `tenantId` e `role`. Depois disso, proteger as rotas e APIs do One validando a sessão e a permissão em todas as operações.
+Preencher as variáveis públicas e do Admin SDK na Vercel, habilitar Google como provedor no Firebase Authentication e garantir que os usuários da Central Admin possuam perfil ativo com papel `platform_owner` ou `orquestra_admin` em `users/{uid}`. A API do One já rejeita convites sem empresa, convites expirados, empresas bloqueadas e funções fora da allowlist.

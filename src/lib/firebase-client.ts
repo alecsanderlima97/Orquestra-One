@@ -24,3 +24,9 @@ export async function signInWithGoogle() {
   const result = await signInWithPopup(getAuth(app), provider);
   return result.user.getIdToken();
 }
+
+export async function getCurrentFirebaseUserToken() {
+  const app = getFirebaseApp();
+  const user = getAuth(app).currentUser;
+  return user ? user.getIdToken() : null;
+}
