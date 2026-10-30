@@ -1,15 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import {
-  Activity, ArrowDownRight, ArrowUpRight, Bell, Boxes, Building2, CalendarClock, CalendarDays,
+  Activity, ArrowDownRight, ArrowUpDown, ArrowUpRight, Bell, Boxes, Building2, CalendarClock, CalendarDays,
   CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, ClipboardList, Clock3, FileBarChart,
   FilePlus2, LayoutDashboard, MapPin, Menu, PackageCheck, Plus, Search, Settings2,
   MessageCircle, ShieldCheck, Sparkles, UserCog, Users, WalletCards, Wrench, X, type LucideIcon,
 } from "lucide-react";
 import { formatBRL } from "@/src/domain/money";
 import type { SectionId } from "@/src/domain/types";
-import { useDemoData, type AppointmentRecord, type ClientRecord, type FinanceRecord, type WorkOrderRecord } from "@/src/components/demo-data";
+import { useDemoData, type AppointmentPatch, type AppointmentRecord, type ClientRecord, type FinanceRecord, type WorkOrderRecord } from "@/src/components/demo-data";
 import { RecordDialog, type RecordKind } from "@/src/components/record-dialog";
 
 const navigation: Array<{ id: Exclude<SectionId, "settings">; label: string; icon: LucideIcon }> = [
@@ -38,6 +38,10 @@ type AgendaMode = "day" | "week" | "month";
 
 const DEMO_TODAY = "2026-10-29";
 const AGENDA_HOURS = Array.from({ length: 13 }, (_, index) => `${String(index + 7).padStart(2, "0")}:00`);
+const AGENDA_START_MINUTES = 7 * 60;
+const AGENDA_END_MINUTES = 20 * 60;
+const AGENDA_HOUR_HEIGHT = 66;
+const AGENDA_SNAP_MINUTES = 30;
 
 function parseAgendaDate(value: string) {
   const [year, month, day] = value.split("-").map(Number);
@@ -98,6 +102,40 @@ function agendaShortWeekday(value: string) {
 
 function appointmentHour(appointment: AppointmentRecord) {
   return Number(appointment.time.slice(0, 2));
+}
+
+function appointmentMinutes(appointment: AppointmentRecord) {
+  const [hours, minutes] = appointment.time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function appointmentDurationMinutes(appointment: AppointmentRecord) {
+  if (appointment.duration.toLowerCase().includes("dia")) return 8 * 60;
+  const duration = appointment.duration.match(/(\d+)h(?:\s*(\d+))?/i);
+  const minutesOnly = appointment.duration.match(/(\d+)\s*min/i);
+  return Math.max(AGENDA_SNAP_MINUTES, (Number(duration?.[1] ?? 0) * 60) + Number(duration?.[2] ?? minutesOnly?.[1] ?? 0));
+}
+
+function snapAgendaMinutes(value: number) {
+  return Math.round(value / AGENDA_SNAP_MINUTES) * AGENDA_SNAP_MINUTES;
+}
+
+function clampAgendaMinutes(value: number, minimum: number, maximum: number) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function formatAgendaTime(minutes: number) {
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function formatAgendaDuration(minutes: number) {
+  if (minutes >= 8 * 60) return "Dia inteiro";
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  if (!hours) return `${remainder} min`;
+  return remainder ? `${hours}h ${remainder}` : `${hours}h`;
 }
 
 function appointmentCadenceLabel(cadence?: AppointmentRecord["cadence"]) {
@@ -220,6 +258,12 @@ function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => voi
     setSelectedDate(appointment.date);
   }
 
+  function updateAppointment(appointmentId: string, patch: AppointmentPatch) {
+    data.updateAppointment(appointmentId, patch);
+    setSelectedAppointmentId(appointmentId);
+    if (patch.date) setSelectedDate(patch.date);
+  }
+
   return <section className="panel full-panel agenda-workspace">
     <PanelHeader eyebrow={`${list.length} compromisso(s) no período`} title="Calendário operacional" action="Novo agendamento" onAction={() => onOpen("appointment")} />
     <div className="agenda-controls">
@@ -234,14 +278,14 @@ function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => voi
       </div>
     </div>
     <div className="agenda-toolbar-bottom">
-      <span><CalendarDays size={15} /> {mode === "day" ? "Visualização diária" : mode === "week" ? "Semana com horários e compromissos · use as setas para trocar a semana" : "Visão ampla do mês"}</span>
+      <span><CalendarDays size={15} /> {mode === "day" ? "Visualização diária" : mode === "week" ? "Arraste para mover · use a seta ↕ para ajustar a duração" : "Visão ampla do mês"}</span>
       <div className="agenda-professional-legend" aria-label="Legenda de responsáveis">{professionals.map((professional) => <span key={professional}><i className={`agenda-professional-dot agenda-professional-${professionalColor(professional)}`} />{professional}</span>)}</div>
       <label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente, serviço ou endereço" aria-label="Filtrar agenda" /></label>
     </div>
     <div className="agenda-calendar-layout">
       <div className="agenda-calendar-main">
         {mode === "day" && <AgendaDayView date={selectedDate} appointments={list} onSelect={selectAppointment} />}
-        {mode === "week" && <AgendaWeekView days={weekDays} appointments={list} selectedDate={selectedDate} onSelectDate={chooseDate} onSelect={selectAppointment} />}
+        {mode === "week" && <AgendaWeekView days={weekDays} appointments={list} selectedDate={selectedDate} onSelectDate={chooseDate} onSelect={selectAppointment} onUpdate={updateAppointment} />}
         {mode === "month" && <AgendaMonthView date={selectedDate} appointments={list} selectedDate={selectedDate} onSelectDate={chooseDate} />}
         {!list.length && <div className="agenda-filter-empty"><EmptyState message="Nenhum compromisso corresponde ao filtro neste período." /></div>}
       </div>
@@ -250,20 +294,104 @@ function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => voi
   </section>;
 }
 
-function AgendaAppointmentCard({ appointment, onSelect, compact = false }: { appointment: AppointmentRecord; onSelect: (appointment: AppointmentRecord) => void; compact?: boolean }) {
-  return <button className={`agenda-appointment-card ${compact ? "agenda-appointment-card-compact" : ""}`} type="button" onClick={() => onSelect(appointment)}>
+type AgendaPointerHandler = (event: ReactPointerEvent<HTMLElement>) => void;
+
+function AgendaAppointmentCard({ appointment, onSelect, compact = false, style, onStartDrag, onStartResize }: { appointment: AppointmentRecord; onSelect: (appointment: AppointmentRecord) => void; compact?: boolean; style?: CSSProperties; onStartDrag?: AgendaPointerHandler; onStartResize?: AgendaPointerHandler }) {
+  return <div
+    className={`agenda-appointment-card ${compact ? "agenda-appointment-card-compact" : ""} ${onStartDrag ? "agenda-appointment-card-draggable" : ""}`}
+    role="button"
+    tabIndex={0}
+    style={style}
+    aria-label={`${appointment.time} ${appointment.client} ${appointment.service}. Arraste para mover. Puxe a alça inferior para alterar a duração.`}
+    onClick={() => onSelect(appointment)}
+    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(appointment); } }}
+    onPointerDown={(event) => { if (!onStartDrag || (event.pointerType === "mouse" && event.button !== 0)) return; event.preventDefault(); onStartDrag(event as ReactPointerEvent<HTMLElement>); }}
+  >
     <span className="agenda-card-time"><i className={`agenda-professional-dot agenda-professional-${professionalColor(appointment.professional)}`} />{appointment.time}</span>
     <span className="agenda-card-copy"><strong>{appointment.client}</strong><span>{appointment.service}</span>{!compact && <small><MapPin size={11} /> {appointment.address}</small>}</span>
     <StatusPill status={appointment.status} />
-  </button>;
+    {onStartResize && <button className="agenda-resize-handle" type="button" aria-label={`Alterar duração de ${appointment.client}`} onClick={(event) => event.stopPropagation()} onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); onStartResize(event as ReactPointerEvent<HTMLElement>); }}><ArrowUpDown size={13} /></button>}
+  </div>;
 }
 
 function AgendaDayView({ date, appointments, onSelect }: { date: string; appointments: AppointmentRecord[]; onSelect: (appointment: AppointmentRecord) => void }) {
   return <div className="agenda-day-view"><div className="agenda-calendar-caption"><div><p className="eyebrow">Agenda do dia</p><h3>{agendaLongDateLabel(date)}</h3></div><span>{appointments.length} compromisso(s)</span></div><div className="agenda-time-grid">{AGENDA_HOURS.map((hour) => { const hourAppointments = appointments.filter((appointment) => appointmentHour(appointment) === Number(hour.slice(0, 2))); return <div className="agenda-time-row" key={hour}><div className="agenda-hour-label"><Clock3 size={13} />{hour}</div><div className="agenda-time-slot">{hourAppointments.length ? hourAppointments.map((appointment) => <AgendaAppointmentCard key={appointment.id} appointment={appointment} onSelect={onSelect} />) : <span className="agenda-free-slot">Horário livre</span>}</div></div>; })}</div></div>;
 }
 
-function AgendaWeekView({ days, appointments, selectedDate, onSelectDate, onSelect }: { days: string[]; appointments: AppointmentRecord[]; selectedDate: string; onSelectDate: (date: string) => void; onSelect: (appointment: AppointmentRecord) => void }) {
-  return <div className="agenda-week-view"><div className="agenda-week-grid"><div className="agenda-week-axis"><div className="agenda-week-axis-head">Horário</div>{AGENDA_HOURS.map((hour) => <div className="agenda-week-hour" key={hour}>{hour}</div>)}</div>{days.map((date) => { const dayAppointments = appointments.filter((appointment) => appointment.date === date).sort((a, b) => a.time.localeCompare(b.time)); return <div className={`agenda-week-column ${date === selectedDate ? "agenda-week-column-active" : ""}`} key={date}><button className="agenda-week-day" type="button" onClick={() => onSelectDate(date)}><span>{agendaShortWeekday(date)}</span><strong>{parseAgendaDate(date).getDate()}</strong><small>{dayAppointments.length} ag.</small></button><div className="agenda-week-column-body">{AGENDA_HOURS.map((hour) => { const hourAppointments = dayAppointments.filter((appointment) => appointmentHour(appointment) === Number(hour.slice(0, 2))); return <div className="agenda-week-time-slot" key={hour} aria-label={`${agendaShortWeekday(date)} ${hour}`}>{hourAppointments.map((appointment) => <AgendaAppointmentCard key={appointment.id} appointment={appointment} onSelect={onSelect} compact />)}</div>; })}</div></div>; })}</div></div>;
+type AgendaInteraction = {
+  type: "drag" | "resize";
+  pointerId: number;
+  appointmentId: string;
+  startX: number;
+  startY: number;
+  originDate: string;
+  originMinutes: number;
+  originDurationMinutes: number;
+  date: string;
+  minutes: number;
+  durationMinutes: number;
+};
+
+function AgendaWeekView({ days, appointments, selectedDate, onSelectDate, onSelect, onUpdate }: { days: string[]; appointments: AppointmentRecord[]; selectedDate: string; onSelectDate: (date: string) => void; onSelect: (appointment: AppointmentRecord) => void; onUpdate: (appointmentId: string, patch: AppointmentPatch) => void }) {
+  const [interaction, setInteraction] = useState<AgendaInteraction | null>(null);
+  const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  function beginInteraction(event: ReactPointerEvent<HTMLElement>, appointment: AppointmentRecord, type: AgendaInteraction["type"]) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const minutes = appointmentMinutes(appointment);
+    const durationMinutes = appointmentDurationMinutes(appointment);
+    onSelect(appointment);
+    setInteraction({ type, pointerId: event.pointerId, appointmentId: appointment.id, startX: event.clientX, startY: event.clientY, originDate: appointment.date, originMinutes: minutes, originDurationMinutes: durationMinutes, date: appointment.date, minutes, durationMinutes });
+  }
+
+  function findDateAtX(clientX: number, fallback: string) {
+    return days.find((date) => {
+      const rect = columnRefs.current[date]?.getBoundingClientRect();
+      return rect && clientX >= rect.left && clientX <= rect.right;
+    }) ?? fallback;
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    setInteraction((current) => {
+      if (!current || current.pointerId !== event.pointerId) return current;
+      event.preventDefault();
+      const deltaMinutes = Math.round(((event.clientY - current.startY) * 60 / AGENDA_HOUR_HEIGHT) / AGENDA_SNAP_MINUTES) * AGENDA_SNAP_MINUTES;
+      if (current.type === "resize") {
+        const maximumDuration = AGENDA_END_MINUTES - current.originMinutes;
+        return { ...current, durationMinutes: clampAgendaMinutes(current.originDurationMinutes + deltaMinutes, AGENDA_SNAP_MINUTES, maximumDuration) };
+      }
+      const maximumStart = AGENDA_END_MINUTES - current.originDurationMinutes;
+      return { ...current, date: findDateAtX(event.clientX, current.originDate), minutes: clampAgendaMinutes(current.originMinutes + deltaMinutes, AGENDA_START_MINUTES, maximumStart) };
+    });
+  }
+
+  function finishInteraction(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!interaction || interaction.pointerId !== event.pointerId) return;
+    const appointment = appointments.find((item) => item.id === interaction.appointmentId);
+    const changed = appointment && (interaction.date !== interaction.originDate || interaction.minutes !== interaction.originMinutes || interaction.durationMinutes !== interaction.originDurationMinutes);
+    if (appointment && changed) {
+      const patch: AppointmentPatch = { date: interaction.date, time: formatAgendaTime(interaction.minutes), duration: formatAgendaDuration(interaction.durationMinutes) };
+      if (appointment.endDate === appointment.date) patch.endDate = interaction.date;
+      onUpdate(appointment.id, patch);
+    }
+    setInteraction(null);
+  }
+
+  return <div className="agenda-week-view" onPointerMove={handlePointerMove} onPointerUp={finishInteraction} onPointerCancel={finishInteraction}><div className="agenda-week-grid"><div className="agenda-week-axis"><div className="agenda-week-axis-head">Horário</div>{AGENDA_HOURS.map((hour) => <div className="agenda-week-hour" key={hour}>{hour}</div>)}</div>{days.map((date) => {
+    const dayAppointments = appointments.map((appointment) => {
+      const active = interaction?.appointmentId === appointment.id ? interaction : undefined;
+      return { appointment, date: active?.date ?? appointment.date, minutes: active?.minutes ?? appointmentMinutes(appointment), durationMinutes: active?.durationMinutes ?? appointmentDurationMinutes(appointment) };
+    }).filter((item) => item.date === date).sort((a, b) => a.minutes - b.minutes);
+    return <div className={`agenda-week-column ${date === selectedDate ? "agenda-week-column-active" : ""}`} key={date}>
+      <button className="agenda-week-day" type="button" onClick={() => onSelectDate(date)}><span>{agendaShortWeekday(date)}</span><strong>{parseAgendaDate(date).getDate()}</strong><small>{dayAppointments.length} ag.</small></button>
+      <div className="agenda-week-column-body" ref={(node) => { columnRefs.current[date] = node; }} data-agenda-date={date}>
+        {AGENDA_HOURS.map((hour, index) => <div className="agenda-week-time-slot" key={hour} aria-label={`${agendaShortWeekday(date)} ${hour}`} style={{ top: `${index * AGENDA_HOUR_HEIGHT}px` }} />)}
+        {dayAppointments.map(({ appointment, minutes, durationMinutes }) => <AgendaAppointmentCard key={appointment.id} appointment={{ ...appointment, date, time: formatAgendaTime(minutes), duration: formatAgendaDuration(durationMinutes) }} onSelect={onSelect} compact style={{ top: `${(minutes - AGENDA_START_MINUTES) * AGENDA_HOUR_HEIGHT / 60 + 3}px`, height: `${Math.max(28, durationMinutes * AGENDA_HOUR_HEIGHT / 60 - 6)}px` }} onStartDrag={(event) => beginInteraction(event, appointment, "drag")} onStartResize={(event) => beginInteraction(event, appointment, "resize")} />)}
+      </div>
+    </div>;
+  })}</div></div>;
 }
 
 function AgendaMonthView({ date, appointments, selectedDate, onSelectDate }: { date: string; appointments: AppointmentRecord[]; selectedDate: string; onSelectDate: (date: string) => void }) {

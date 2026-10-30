@@ -37,6 +37,7 @@ export type SupplierRecord = {
 
 export type AppointmentCadence = "single" | "daily" | "weekdays" | "weekly";
 export type AppointmentRecord = (typeof appointments)[number] & { clientId: string; date: string; endDate?: string; cadence?: AppointmentCadence; seriesId?: string; notes: string; workOrderId?: string };
+export type AppointmentPatch = Partial<Pick<AppointmentRecord, "date" | "time" | "duration" | "endDate">>;
 export type DescriptionRevision = { id: string; text: string; createdAt: string };
 export type WorkOrderRecord = (typeof workOrders)[number] & { clientId: string; description: string; descriptionHistory?: DescriptionRevision[]; diary: Array<{ id: string; text: string; createdAt: string }>; materialLines: Array<{ stockId: string; quantity: number }> };
 export type FinanceRecord = (typeof financeItems)[number] & { originId?: string; category: string; paidAt?: string };
@@ -60,6 +61,7 @@ type DemoActions = {
   addSupplier: (record: Omit<SupplierRecord, "id" | "initials" | "tone">) => void;
   addAppointment: (record: Omit<AppointmentRecord, "id" | "status">) => void;
   addAppointments: (records: Array<Omit<AppointmentRecord, "id" | "status">>) => void;
+  updateAppointment: (appointmentId: string, patch: AppointmentPatch) => void;
   addWorkOrder: (record: Omit<WorkOrderRecord, "id" | "status" | "updatedAt" | "diary" | "materialLines"> & { materialLines?: WorkOrderRecord["materialLines"] }) => string;
   addFinance: (record: Omit<FinanceRecord, "id" | "status">) => void;
   addStock: (record: Omit<StockRecord, "id">) => void;
@@ -127,6 +129,7 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
     addSupplier: (record) => setState((previous) => ({ ...previous, suppliers: [{ ...record, id: id("fo"), initials: initials(record.name), tone: tones[previous.suppliers.length % tones.length] }, ...previous.suppliers] })),
     addAppointment: (record) => setState((previous) => ({ ...previous, appointments: [{ ...record, id: id("ag"), status: "pending" }, ...previous.appointments] })),
     addAppointments: (records) => setState((previous) => ({ ...previous, appointments: [...records.map((record) => ({ ...record, id: id("ag"), status: "pending" as const })), ...previous.appointments] })),
+    updateAppointment: (appointmentId, patch) => setState((previous) => ({ ...previous, appointments: previous.appointments.map((appointment) => appointment.id === appointmentId ? { ...appointment, ...patch } : appointment) })),
     addWorkOrder: (record) => {
       const nextId = `OS-${String(129 + state.workOrders.length).padStart(5, "0")}`;
       setState((previous) => ({ ...previous, workOrders: [{ ...record, id: nextId, status: "in_progress", updatedAt: "Criada agora", descriptionHistory: [{ id: id("desc"), text: record.description, createdAt: "Descrição inicial" }], diary: [], materialLines: record.materialLines ?? [] }, ...previous.workOrders] }));

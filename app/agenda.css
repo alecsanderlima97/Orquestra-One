@@ -147,9 +147,15 @@
 .agenda-week-hour { height: 66px; box-sizing: border-box; border-top: 1px solid #edf0f4; padding: 10px 6px; color: #9aa5b3; font-size: 8px; }
 .agenda-week-column { min-height: 0; }
 .agenda-week-day { min-height: 56px; box-sizing: border-box; }
-.agenda-week-column-body { min-height: 0; display: grid; grid-template-rows: repeat(13, 66px); gap: 0; padding: 0; background: transparent; }
-.agenda-week-time-slot { min-width: 0; min-height: 66px; box-sizing: border-box; border-top: 1px solid #f0f2f5; padding: 7px; background: repeating-linear-gradient(to bottom, transparent 0, transparent 31px, rgba(244,246,248,.7) 32px); }
-.agenda-week-time-slot .agenda-appointment-card { min-height: 47px; }
+.agenda-week-column-body { position: relative; min-height: 0; height: 858px; padding: 0; overflow: hidden; background: transparent; }
+.agenda-week-time-slot { position: absolute; left: 0; right: 0; height: 66px; box-sizing: border-box; border-top: 1px solid #f0f2f5; padding: 0 7px; background: repeating-linear-gradient(to bottom, transparent 0, transparent 32px, rgba(244,246,248,.7) 33px); }
+.agenda-week-column-body .agenda-appointment-card { position: absolute; left: 7px; right: 7px; width: calc(100% - 14px); min-height: 0; box-sizing: border-box; z-index: 2; overflow: hidden; cursor: grab; touch-action: none; }
+.agenda-week-column-body .agenda-appointment-card:active { cursor: grabbing; }
+.agenda-week-column-body .agenda-appointment-card:focus-visible { z-index: 4; outline: 2px solid #55a477; outline-offset: 1px; }
+.agenda-week-column-body .agenda-appointment-card-compact { align-items: flex-start; padding: 6px 7px 15px; }
+.agenda-resize-handle { position: absolute; right: 50%; bottom: 0; display: flex; align-items: center; justify-content: center; width: 34px; height: 17px; transform: translateX(50%); border: 0; border-radius: 5px 5px 0 0; padding: 0; color: #538269; background: rgba(255, 255, 255, .78); cursor: ns-resize; opacity: .72; touch-action: none; }
+.agenda-resize-handle:hover, .agenda-resize-handle:focus-visible { color: #2d7653; background: #fff; opacity: 1; outline: 0; }
+.agenda-appointment-card-draggable:hover .agenda-resize-handle { opacity: 1; }
 .agenda-professional-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: #84918a; font-size: 8px; }
 .agenda-professional-legend span { display: inline-flex; align-items: center; gap: 4px; }
 .agenda-professional-dot { width: 7px; height: 7px; display: inline-block; flex: 0 0 7px; border-radius: 50%; }
@@ -166,4 +172,6 @@
   .agenda-week-axis-head { padding-left: 5px; }
   .agenda-week-hour { padding-left: 5px; }
   .agenda-professional-legend { order: 3; }
+  .agenda-week-column-body .agenda-appointment-card { left: 5px; right: 5px; width: calc(100% - 10px); }
+  .agenda-resize-handle { width: 38px; height: 20px; }
 }
