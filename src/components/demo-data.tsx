@@ -36,7 +36,8 @@ export type SupplierRecord = {
 };
 
 export type AppointmentRecord = (typeof appointments)[number] & { clientId: string; date: string; notes: string; workOrderId?: string };
-export type WorkOrderRecord = (typeof workOrders)[number] & { clientId: string; description: string; diary: Array<{ id: string; text: string; createdAt: string }>; materialLines: Array<{ stockId: string; quantity: number }> };
+export type DescriptionRevision = { id: string; text: string; createdAt: string };
+export type WorkOrderRecord = (typeof workOrders)[number] & { clientId: string; description: string; descriptionHistory?: DescriptionRevision[]; diary: Array<{ id: string; text: string; createdAt: string }>; materialLines: Array<{ stockId: string; quantity: number }> };
 export type FinanceRecord = (typeof financeItems)[number] & { originId?: string; category: string; paidAt?: string };
 export type StockRecord = (typeof stockItems)[number] & { costCents: number };
 export type TeamRecord = (typeof teamMembers)[number] & { email: string };
@@ -61,20 +62,21 @@ type DemoActions = {
   addFinance: (record: Omit<FinanceRecord, "id" | "status">) => void;
   addStock: (record: Omit<StockRecord, "id">) => void;
   addDiary: (workOrderId: string, text: string) => void;
+  reviseWorkOrderDescription: (workOrderId: string, text: string) => void;
   closeWorkOrder: (workOrderId: string) => void;
   invite: (email: string, role: string, kind: "owner" | "team") => void;
   addTeamMember: (record: Omit<TeamRecord, "id" | "initials" | "tone">) => void;
 };
 
-const storageKey = "orquestra-one-demo-v3";
+const storageKey = "orquestra-one-demo-v4";
 const tones = ["mint", "blue", "sand", "rose", "violet"];
 
 function buildInitialState(): DemoState {
   return {
-    clients: clients.map((client, index) => ({ ...client, kind: "pf", document: "", email: "", phone: "", city: "Sorocaba", state: "SP", address: "", cep: "", history: [client.detail], tone: client.tone ?? tones[index % tones.length] })),
+    clients: clients.map((client, index) => ({ ...client, kind: "pf", document: "", email: `${client.name.toLowerCase().replace(/\\s+/g, ".")}@exemplo.com`, phone: ["(15) 99847-8705", "(15) 99711-2400", "(15) 99620-1188", "(15) 99140-2233"][index] ?? "", city: "Sorocaba", state: "SP", address: "", cep: "", history: [client.detail], tone: client.tone ?? tones[index % tones.length] })),
     suppliers: suppliers.map((supplier, index) => ({ ...supplier, document: "", email: "", state: "SP", address: "", cep: "", tone: supplier.tone ?? tones[index % tones.length] })),
-    appointments: appointments.map((appointment, index) => ({ ...appointment, clientId: `cl-${Math.min(index + 1, 4)}`, date: "2026-10-29", notes: "" })),
-    workOrders: workOrders.map((order, index) => ({ ...order, clientId: `cl-${Math.min(index + 1, 4)}`, description: order.service, diary: [], materialLines: [] })),
+    appointments: appointments.map((appointment, index) => ({ ...appointment, clientId: `cl-${Math.min(index + 1, 4)}`, date: "2026-10-29", notes: "", workOrderId: ["OS-00128", "OS-00126", "OS-00127", ""][index] || undefined })),
+    workOrders: workOrders.map((order, index) => ({ ...order, clientId: `cl-${Math.min(index + 1, 4)}`, description: order.service, descriptionHistory: [{ id: `desc-${order.id}`, text: order.service, createdAt: "Descrição inicial" }], diary: [], materialLines: [] })),
     finance: financeItems.map((item) => ({
       ...item,
       category: item.type === "receivable" ? "Serviços" : "Operacional",
@@ -124,12 +126,13 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
     addAppointment: (record) => setState((previous) => ({ ...previous, appointments: [{ ...record, id: id("ag"), status: "pending" }, ...previous.appointments] })),
     addWorkOrder: (record) => {
       const nextId = `OS-${String(129 + state.workOrders.length).padStart(5, "0")}`;
-      setState((previous) => ({ ...previous, workOrders: [{ ...record, id: nextId, status: "in_progress", updatedAt: "Criada agora", diary: [], materialLines: record.materialLines ?? [] }, ...previous.workOrders] }));
+      setState((previous) => ({ ...previous, workOrders: [{ ...record, id: nextId, status: "in_progress", updatedAt: "Criada agora", descriptionHistory: [{ id: id("desc"), text: record.description, createdAt: "Descrição inicial" }], diary: [], materialLines: record.materialLines ?? [] }, ...previous.workOrders] }));
       return nextId;
     },
     addFinance: (record) => setState((previous) => ({ ...previous, finance: [{ ...record, id: id("fin"), status: "open" }, ...previous.finance] })),
     addStock: (record) => setState((previous) => ({ ...previous, stock: [{ ...record, id: id("st") }, ...previous.stock] })),
     addDiary: (workOrderId, text) => setState((previous) => ({ ...previous, workOrders: previous.workOrders.map((order) => order.id === workOrderId ? { ...order, updatedAt: "Diário atualizado agora", diary: [{ id: id("diary"), text, createdAt: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()) }, ...order.diary] } : order) })),
+    reviseWorkOrderDescription: (workOrderId, text) => setState((previous) => ({ ...previous, workOrders: previous.workOrders.map((order) => { if (order.id !== workOrderId || !text.trim()) return order; const history = order.descriptionHistory?.length ? order.descriptionHistory : [{ id: id("desc"), text: order.description, createdAt: "Descrição inicial" }]; return { ...order, description: text.trim(), updatedAt: "Descrição revisada agora", descriptionHistory: [{ id: id("desc"), text: text.trim(), createdAt: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()) }, ...history] }; }) })),
     closeWorkOrder: (workOrderId) => setState((previous) => {
       const order = previous.workOrders.find((item) => item.id === workOrderId);
       if (!order || order.status === "completed") return previous;

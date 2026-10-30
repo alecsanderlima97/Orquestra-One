@@ -3,13 +3,13 @@
 import { useMemo, useState } from "react";
 import {
   Activity, ArrowDownRight, ArrowUpRight, Bell, Boxes, Building2, CalendarClock, CalendarDays,
-  CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, ClipboardList, FileBarChart,
+  CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, ClipboardList, Clock3, FileBarChart,
   FilePlus2, LayoutDashboard, MapPin, Menu, PackageCheck, Plus, Search, Settings2,
-  ShieldCheck, Sparkles, UserCog, Users, WalletCards, Wrench, X, type LucideIcon,
+  MessageCircle, ShieldCheck, Sparkles, UserCog, Users, WalletCards, Wrench, X, type LucideIcon,
 } from "lucide-react";
 import { formatBRL } from "@/src/domain/money";
 import type { SectionId } from "@/src/domain/types";
-import { useDemoData, type FinanceRecord, type WorkOrderRecord } from "@/src/components/demo-data";
+import { useDemoData, type AppointmentRecord, type ClientRecord, type FinanceRecord, type WorkOrderRecord } from "@/src/components/demo-data";
 import { RecordDialog, type RecordKind } from "@/src/components/record-dialog";
 
 const navigation: Array<{ id: Exclude<SectionId, "settings">; label: string; icon: LucideIcon }> = [
@@ -34,6 +34,83 @@ const sectionCopy: Record<SectionId, { eyebrow: string; title: string; descripti
 };
 
 type Status = "in_progress" | "waiting" | "completed" | "confirmed" | "pending" | "paid" | "open" | "overdue";
+type AgendaMode = "day" | "week" | "month";
+
+const DEMO_TODAY = "2026-10-29";
+const AGENDA_HOURS = Array.from({ length: 13 }, (_, index) => `${String(index + 7).padStart(2, "0")}:00`);
+
+function parseAgendaDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatAgendaDate(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function moveAgendaDate(value: string, amount: number) {
+  const date = parseAgendaDate(value);
+  date.setDate(date.getDate() + amount);
+  return formatAgendaDate(date);
+}
+
+function moveAgendaMonth(value: string, amount: number) {
+  const date = parseAgendaDate(value);
+  date.setMonth(date.getMonth() + amount, 1);
+  return formatAgendaDate(date);
+}
+
+function startOfAgendaWeek(value: string) {
+  const date = parseAgendaDate(value);
+  const day = date.getDay();
+  date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+  return formatAgendaDate(date);
+}
+
+function getAgendaMonthDays(value: string) {
+  const date = parseAgendaDate(value);
+  const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+  const firstMondayOffset = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
+  const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  const totalDays = Math.ceil((firstMondayOffset + daysInMonth) / 7) * 7;
+  const gridStart = new Date(date.getFullYear(), date.getMonth(), 1 - firstMondayOffset);
+  return Array.from({ length: totalDays }, (_, index) => {
+    const day = new Date(gridStart);
+    day.setDate(gridStart.getDate() + index);
+    return formatAgendaDate(day);
+  });
+}
+
+function agendaMonthLabel(value: string) {
+  return parseAgendaDate(value).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+}
+
+function agendaLongDateLabel(value: string) {
+  return parseAgendaDate(value).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+}
+
+function agendaShortWeekday(value: string) {
+  return parseAgendaDate(value).toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "");
+}
+
+function appointmentHour(appointment: AppointmentRecord) {
+  return Number(appointment.time.slice(0, 2));
+}
+
+function whatsappHref(phone: string, message: string) {
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return "";
+  const normalized = digits.startsWith("55") ? digits : `55${digits}`;
+  return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
+}
+
+function WhatsAppLink({ phone, message, label }: { phone: string; message: string; label: string }) {
+  const href = whatsappHref(phone, message);
+  return href ? <a className="whatsapp-link" href={href} target="_blank" rel="noreferrer"><MessageCircle size={12} /> {label}</a> : <span className="whatsapp-link whatsapp-link-disabled"><MessageCircle size={12} /> WhatsApp não informado</span>;
+}
 
 function StatusPill({ status }: { status: Status }) {
   const copy: Record<Status, string> = { in_progress: "Em andamento", waiting: "Aguardando", completed: "Concluída", confirmed: "Confirmado", pending: "Pendente", paid: "Pago", open: "Em aberto", overdue: "Vencido" };
@@ -83,7 +160,7 @@ function QuickActions({ onOpen, onClose }: { onOpen: (kind: RecordKind) => void;
 }
 
 function AppointmentRow({ appointment }: { appointment: ReturnType<typeof useDemoData>["appointments"][number] }) { return <div className="appointment-row"><div className="appointment-time"><strong>{appointment.time}</strong><span>{appointment.duration}</span></div><div className="appointment-line"><span className={`appointment-marker marker-${appointment.status}`} /></div><div className="appointment-info"><div className="appointment-title"><strong>{appointment.client}</strong><StatusPill status={appointment.status} /></div><span>{appointment.service}</span><small><MapPin size={12} /> {appointment.address}</small></div></div>; }
-function OrderRow({ order, onDiary, onClose }: { order: WorkOrderRecord; onDiary: () => void; onClose: () => void }) { return <div className="order-row operational-order-row"><div className="order-id">{order.id}</div><div className="order-info"><strong>{order.service}</strong><span>{order.client} · {order.professional}{order.diary.length ? ` · ${order.diary.length} registro(s)` : ""}</span></div><div className="order-amount">{formatBRL(order.amountCents)}<small>{order.updatedAt}</small></div><StatusPill status={order.status} /><div className="row-actions"><button className="table-action" type="button" onClick={onDiary}>Diário</button>{order.status !== "completed" && <button className="table-action table-action-success" type="button" onClick={onClose}>Fechar</button>}</div></div>; }
+function OrderRow({ order, onDiary, onClose, onDescription }: { order: WorkOrderRecord; onDiary: () => void; onClose: () => void; onDescription?: () => void }) { return <div className="order-row operational-order-row"><div className="order-id">{order.id}</div><div className="order-info"><strong>{order.service}</strong><span>{order.client} · {order.professional}{order.diary.length ? ` · ${order.diary.length} registro(s)` : ""}</span></div><div className="order-amount">{formatBRL(order.amountCents)}<small>{order.updatedAt}</small></div><StatusPill status={order.status} /><div className="row-actions"><button className="table-action" type="button" onClick={onDiary}>Diário</button>{onDescription && <button className="table-action" type="button" onClick={onDescription}>Descrição</button>}{order.status !== "completed" && <button className="table-action table-action-success" type="button" onClick={onClose}>Fechar</button>}</div></div>; }
 
 function Overview({ onNavigate, onOpen }: { onNavigate: (section: SectionId) => void; onOpen: (kind: RecordKind) => void }) {
   const data = useDemoData(); const receivable = data.finance.filter((item) => item.type === "receivable" && item.status !== "paid").reduce((sum, item) => sum + item.amountCents, 0); const payable = data.finance.filter((item) => item.type === "payable" && item.status !== "paid").reduce((sum, item) => sum + item.amountCents, 0); const active = data.workOrders.filter((order) => order.status === "in_progress").length;
@@ -92,20 +169,121 @@ function Overview({ onNavigate, onOpen }: { onNavigate: (section: SectionId) => 
 
 function Metric({ icon: Icon, label, value, detail, tone }: { icon: LucideIcon; label: string; value: string; detail: string; tone: string }) { return <article className="metric-card"><div className={`metric-icon metric-icon-${tone}`}><Icon size={18} /></div><p>{label}</p><strong>{value}</strong><span className="metric-detail">{detail}</span></article>; }
 
-function AgendaView({ onOpen }: { onOpen: (kind: RecordKind) => void }) { const data = useDemoData(); const [period, setPeriod] = useState("today"); const [query, setQuery] = useState(""); const list = data.appointments.filter((item) => (period === "all" || item.date === "2026-10-29") && `${item.client} ${item.service}`.toLowerCase().includes(query.toLowerCase())); return <section className="panel full-panel"><PanelHeader eyebrow={`${list.length} compromisso(s) encontrado(s)`} title="Agenda dinâmica" action="Novo agendamento" onAction={() => onOpen("appointment")} /><div className="view-toolbar"><div className="date-tabs"><button className={`date-tab ${period === "today" ? "date-tab-active" : ""}`} type="button" onClick={() => setPeriod("today")}>Hoje <span>{data.appointments.filter((item) => item.date === "2026-10-29").length}</span></button><button className={`date-tab ${period === "all" ? "date-tab-active" : ""}`} type="button" onClick={() => setPeriod("all")}>Todos <span>{data.appointments.length}</span></button></div><label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrar cliente ou serviço" aria-label="Filtrar agenda" /></label></div><div className="agenda-full-list">{list.map((appointment) => <AppointmentRow key={appointment.id} appointment={appointment} />)}{!list.length && <EmptyState message="Nenhum compromisso corresponde ao filtro." />}</div></section>; }
+function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => void }) {
+  const data = useDemoData();
+  const [mode, setMode] = useState<AgendaMode>("week");
+  const [selectedDate, setSelectedDate] = useState(DEMO_TODAY);
+  const [query, setQuery] = useState("");
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>();
+  const weekStart = startOfAgendaWeek(selectedDate);
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => moveAgendaDate(weekStart, index)), [weekStart]);
+  const carouselDays = useMemo(() => Array.from({ length: 7 }, (_, index) => moveAgendaDate(selectedDate, index - 3)), [selectedDate]);
+  const list = useMemo(() => data.appointments.filter((item) => {
+    const matchesPeriod = mode === "day"
+      ? item.date === selectedDate
+      : mode === "week"
+        ? item.date >= weekDays[0] && item.date <= weekDays[weekDays.length - 1]
+        : item.date.slice(0, 7) === selectedDate.slice(0, 7);
+    const matchesQuery = `${item.client} ${item.service} ${item.address}`.toLowerCase().includes(query.toLowerCase());
+    return matchesPeriod && matchesQuery;
+  }), [data.appointments, mode, query, selectedDate, weekDays]);
+  const selectedAppointment = data.appointments.find((item) => item.id === selectedAppointmentId) ?? list[0] ?? null;
+  const selectedClient = selectedAppointment ? data.clients.find((client) => client.id === selectedAppointment.clientId) : undefined;
+  const periodLabel = mode === "day"
+    ? agendaLongDateLabel(selectedDate)
+    : mode === "week"
+      ? `${parseAgendaDate(weekDays[0]).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} — ${parseAgendaDate(weekDays[6]).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}`
+      : agendaMonthLabel(selectedDate);
 
-function OrdersView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => void }) { const data = useDemoData(); const [filter, setFilter] = useState<"all" | WorkOrderRecord["status"]>("all"); const [query, setQuery] = useState(""); const list = data.workOrders.filter((item) => (filter === "all" || item.status === filter) && `${item.id} ${item.client} ${item.service}`.toLowerCase().includes(query.toLowerCase())); return <section className="panel full-panel"><PanelHeader eyebrow={`${data.workOrders.length} ordens registradas`} title="Acompanhe os serviços" action="Nova ordem" onAction={() => onOpen("order")} /><div className="view-toolbar"><div className="filter-pills"><button className={`filter-pill ${filter === "all" ? "filter-pill-active" : ""}`} type="button" onClick={() => setFilter("all")}>Todas <span>{data.workOrders.length}</span></button><button className={`filter-pill ${filter === "in_progress" ? "filter-pill-active" : ""}`} type="button" onClick={() => setFilter("in_progress")}>Em andamento <span>{data.workOrders.filter((item) => item.status === "in_progress").length}</span></button><button className={`filter-pill ${filter === "waiting" ? "filter-pill-active" : ""}`} type="button" onClick={() => setFilter("waiting")}>Aguardando <span>{data.workOrders.filter((item) => item.status === "waiting").length}</span></button></div><label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar OS ou cliente" /></label></div><div className="orders-table"><div className="table-head"><span>Ordem</span><span>Serviço / cliente</span><span>Valor</span><span>Status</span><span>Ações</span></div>{list.map((order) => <OrderRow key={order.id} order={order} onDiary={() => onOpen("diary", order.id)} onClose={() => data.closeWorkOrder(order.id)} />)}{!list.length && <EmptyState message="Nenhuma ordem corresponde aos filtros." />}</div></section>; }
+  function chooseDate(date: string) {
+    setSelectedDate(date);
+    setSelectedAppointmentId(undefined);
+  }
+
+  function shiftPeriod(amount: number) {
+    chooseDate(mode === "month" ? moveAgendaMonth(selectedDate, amount) : moveAgendaDate(selectedDate, mode === "week" ? amount * 7 : amount));
+  }
+
+  function selectAppointment(appointment: AppointmentRecord) {
+    setSelectedAppointmentId(appointment.id);
+    setSelectedDate(appointment.date);
+  }
+
+  return <section className="panel full-panel agenda-workspace">
+    <PanelHeader eyebrow={`${list.length} compromisso(s) no período`} title="Calendário operacional" action="Novo agendamento" onAction={() => onOpen("appointment")} />
+    <div className="agenda-controls">
+      <div className="agenda-period-navigation">
+        <button className="icon-button agenda-nav-button" type="button" onClick={() => shiftPeriod(-1)} aria-label="Período anterior"><ChevronLeft size={17} /></button>
+        <button className="agenda-today-button" type="button" onClick={() => chooseDate(DEMO_TODAY)}>Hoje</button>
+        <button className="icon-button agenda-nav-button" type="button" onClick={() => shiftPeriod(1)} aria-label="Próximo período"><ChevronRight size={17} /></button>
+        <strong>{periodLabel}</strong>
+      </div>
+      <div className="agenda-view-switcher" role="tablist" aria-label="Modo de visualização da agenda">
+        {(["day", "week", "month"] as AgendaMode[]).map((item) => <button key={item} className={mode === item ? "agenda-view-active" : ""} type="button" role="tab" aria-selected={mode === item} onClick={() => setMode(item)}>{item === "day" ? "Dia" : item === "week" ? "Semana" : "Mês"}</button>)}
+      </div>
+    </div>
+    <div className="agenda-date-carousel">
+      <button className="icon-button agenda-carousel-arrow" type="button" onClick={() => chooseDate(moveAgendaDate(selectedDate, -1))} aria-label="Dia anterior"><ChevronLeft size={16} /></button>
+      <div className="agenda-date-strip">{carouselDays.map((date) => <button key={date} className={`agenda-date-card ${date === selectedDate ? "agenda-date-card-active" : ""}`} type="button" onClick={() => chooseDate(date)}><span>{agendaShortWeekday(date)}</span><strong>{parseAgendaDate(date).getDate()}</strong><small>{data.appointments.filter((item) => item.date === date).length ? `${data.appointments.filter((item) => item.date === date).length} ag.` : "livre"}</small></button>)}</div>
+      <button className="icon-button agenda-carousel-arrow" type="button" onClick={() => chooseDate(moveAgendaDate(selectedDate, 1))} aria-label="Próximo dia"><ChevronRight size={16} /></button>
+    </div>
+    <div className="agenda-toolbar-bottom">
+      <span><CalendarDays size={15} /> {mode === "day" ? "Visualização diária" : mode === "week" ? "Semana com horários e compromissos" : "Visão ampla do mês"}</span>
+      <label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente, serviço ou endereço" aria-label="Filtrar agenda" /></label>
+    </div>
+    <div className="agenda-calendar-layout">
+      <div className="agenda-calendar-main">
+        {mode === "day" && <AgendaDayView date={selectedDate} appointments={list} onSelect={selectAppointment} />}
+        {mode === "week" && <AgendaWeekView days={weekDays} appointments={list} selectedDate={selectedDate} onSelectDate={chooseDate} onSelect={selectAppointment} />}
+        {mode === "month" && <AgendaMonthView date={selectedDate} appointments={list} selectedDate={selectedDate} onSelectDate={chooseDate} />}
+        {!list.length && <div className="agenda-filter-empty"><EmptyState message="Nenhum compromisso corresponde ao filtro neste período." /></div>}
+      </div>
+      <AgendaDetails appointment={selectedAppointment} client={selectedClient} onOpen={onOpen} />
+    </div>
+  </section>;
+}
+
+function AgendaAppointmentCard({ appointment, onSelect, compact = false }: { appointment: AppointmentRecord; onSelect: (appointment: AppointmentRecord) => void; compact?: boolean }) {
+  return <button className={`agenda-appointment-card ${compact ? "agenda-appointment-card-compact" : ""}`} type="button" onClick={() => onSelect(appointment)}>
+    <span className="agenda-card-time">{appointment.time}</span>
+    <span className="agenda-card-copy"><strong>{appointment.client}</strong><span>{appointment.service}</span>{!compact && <small><MapPin size={11} /> {appointment.address}</small>}</span>
+    <StatusPill status={appointment.status} />
+  </button>;
+}
+
+function AgendaDayView({ date, appointments, onSelect }: { date: string; appointments: AppointmentRecord[]; onSelect: (appointment: AppointmentRecord) => void }) {
+  return <div className="agenda-day-view"><div className="agenda-calendar-caption"><div><p className="eyebrow">Agenda do dia</p><h3>{agendaLongDateLabel(date)}</h3></div><span>{appointments.length} compromisso(s)</span></div><div className="agenda-time-grid">{AGENDA_HOURS.map((hour) => { const hourAppointments = appointments.filter((appointment) => appointmentHour(appointment) === Number(hour.slice(0, 2))); return <div className="agenda-time-row" key={hour}><div className="agenda-hour-label"><Clock3 size={13} />{hour}</div><div className="agenda-time-slot">{hourAppointments.length ? hourAppointments.map((appointment) => <AgendaAppointmentCard key={appointment.id} appointment={appointment} onSelect={onSelect} />) : <span className="agenda-free-slot">Horário livre</span>}</div></div>; })}</div></div>;
+}
+
+function AgendaWeekView({ days, appointments, selectedDate, onSelectDate, onSelect }: { days: string[]; appointments: AppointmentRecord[]; selectedDate: string; onSelectDate: (date: string) => void; onSelect: (appointment: AppointmentRecord) => void }) {
+  return <div className="agenda-week-view"><div className="agenda-week-grid">{days.map((date) => { const dayAppointments = appointments.filter((appointment) => appointment.date === date).sort((a, b) => a.time.localeCompare(b.time)); return <div className={`agenda-week-column ${date === selectedDate ? "agenda-week-column-active" : ""}`} key={date}><button className="agenda-week-day" type="button" onClick={() => onSelectDate(date)}><span>{agendaShortWeekday(date)}</span><strong>{parseAgendaDate(date).getDate()}</strong><small>{dayAppointments.length} ag.</small></button><div className="agenda-week-column-body">{dayAppointments.length ? dayAppointments.map((appointment) => <AgendaAppointmentCard key={appointment.id} appointment={appointment} onSelect={onSelect} compact />) : <span className="agenda-free-slot">Sem agenda</span>}</div></div>; })}</div></div>;
+}
+
+function AgendaMonthView({ date, appointments, selectedDate, onSelectDate }: { date: string; appointments: AppointmentRecord[]; selectedDate: string; onSelectDate: (date: string) => void }) {
+  const monthDays = getAgendaMonthDays(date);
+  const monthKey = date.slice(0, 7);
+  return <div className="agenda-month-view"><div className="agenda-weekday-row">{["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((day) => <span key={day}>{day}</span>)}</div><div className="agenda-month-grid">{monthDays.map((day) => { const dayAppointments = appointments.filter((appointment) => appointment.date === day).sort((a, b) => a.time.localeCompare(b.time)); const inMonth = day.slice(0, 7) === monthKey; return <button className={`agenda-month-cell ${inMonth ? "" : "agenda-month-cell-muted"} ${day === selectedDate ? "agenda-month-cell-active" : ""}`} key={day} type="button" onClick={() => onSelectDate(day)}><span className="agenda-month-number">{parseAgendaDate(day).getDate()}</span><span className="agenda-month-items">{dayAppointments.slice(0, 3).map((appointment) => <span className="agenda-month-item" key={appointment.id}><b>{appointment.time}</b> {appointment.client}</span>)}{dayAppointments.length > 3 && <small>+{dayAppointments.length - 3} mais</small>}</span></button>; })}</div></div>;
+}
+
+function AgendaDetails({ appointment, client, onOpen }: { appointment: AppointmentRecord | null; client?: ClientRecord; onOpen: (kind: RecordKind, id?: string) => void }) {
+  if (!appointment) return <aside className="agenda-details agenda-details-empty"><CalendarDays size={22} /><p>Selecione um compromisso para ver os detalhes.</p><span>A agenda reúne cliente, horário, endereço, observações e vínculo com a ordem de serviço.</span></aside>;
+  return <aside className="agenda-details"><div className="agenda-details-head"><div><p className="eyebrow">Compromisso selecionado</p><h3>{appointment.client}</h3><span>{appointment.service}</span></div><StatusPill status={appointment.status} /></div><div className="agenda-detail-list"><div><CalendarDays size={15} /><span><small>Data</small><strong>{agendaLongDateLabel(appointment.date)}</strong></span></div><div><Clock3 size={15} /><span><small>Horário e duração</small><strong>{appointment.time} · {appointment.duration}</strong></span></div><div><MapPin size={15} /><span><small>Local</small><strong>{appointment.address}</strong></span></div>{client?.phone && <div><MessageCircle size={15} /><span><small>Contato rápido</small><WhatsAppLink phone={client.phone} label="Enviar lembrete pelo WhatsApp" message={`Olá, ${client.name}! Confirmando o serviço de ${appointment.service} em ${agendaLongDateLabel(appointment.date)} às ${appointment.time}.`} /></span></div>}</div>{appointment.notes && <div className="agenda-notes"><small>Observações</small><p>{appointment.notes}</p></div>}<div className="agenda-detail-actions"><button className="secondary-button" type="button" onClick={() => onOpen("appointment")}>Editar agenda</button>{appointment.workOrderId && <button className="primary-button" type="button" onClick={() => onOpen("diary", appointment.workOrderId)}>Abrir diário da OS</button>}</div></aside>;
+}
+
+function OrdersView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => void }) { const data = useDemoData(); const [filter, setFilter] = useState<"all" | WorkOrderRecord["status"]>("all"); const [query, setQuery] = useState(""); const [descriptionOrderId, setDescriptionOrderId] = useState<string>(); const list = data.workOrders.filter((item) => (filter === "all" || item.status === filter) && `${item.id} ${item.client} ${item.service}`.toLowerCase().includes(query.toLowerCase())); const descriptionOrder = data.workOrders.find((order) => order.id === descriptionOrderId); return <section className="panel full-panel"><PanelHeader eyebrow={`${data.workOrders.length} ordens registradas`} title="Acompanhe os serviços" action="Nova ordem" onAction={() => onOpen("order")} /><div className="view-toolbar"><div className="filter-pills"><button className={`filter-pill ${filter === "all" ? "filter-pill-active" : ""}`} type="button" onClick={() => setFilter("all")}>Todas <span>{data.workOrders.length}</span></button><button className={`filter-pill ${filter === "in_progress" ? "filter-pill-active" : ""}`} type="button" onClick={() => setFilter("in_progress")}>Em andamento <span>{data.workOrders.filter((item) => item.status === "in_progress").length}</span></button><button className={`filter-pill ${filter === "waiting" ? "filter-pill-active" : ""}`} type="button" onClick={() => setFilter("waiting")}>Aguardando <span>{data.workOrders.filter((item) => item.status === "waiting").length}</span></button></div><label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar OS ou cliente" /></label></div><div className="orders-table"><div className="table-head"><span>Ordem</span><span>Serviço / cliente</span><span>Valor</span><span>Status</span><span>Ações</span></div>{list.map((order) => <OrderRow key={order.id} order={order} onDiary={() => onOpen("diary", order.id)} onDescription={() => setDescriptionOrderId(order.id)} onClose={() => data.closeWorkOrder(order.id)} />)}{!list.length && <EmptyState message="Nenhuma ordem corresponde aos filtros." />}</div>{descriptionOrder && <DescriptionHistory order={descriptionOrder} onSave={(text) => data.reviseWorkOrderDescription(descriptionOrder.id, text)} onClose={() => setDescriptionOrderId(undefined)} />}</section>; }
+
+function DescriptionHistory({ order, onSave, onClose }: { order: WorkOrderRecord; onSave: (text: string) => void; onClose: () => void }) { const [draft, setDraft] = useState(order.description); return <section className="description-history-panel"><div className="description-history-head"><div><p className="eyebrow">Descrição preservada · {order.id}</p><h3>Versões do escopo e do relato do cliente</h3></div><button className="icon-button" type="button" onClick={onClose} aria-label="Fechar histórico da descrição"><X size={17} /></button></div><p className="description-history-note">Cada ajuste cria uma nova versão. Nada é apagado: o histórico completo segue disponível para conferência e para o relatório assistido.</p><label className="field-wrap">Descrição atual<textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={4} /></label><button className="primary-button description-save" type="button" onClick={() => { onSave(draft); setDraft(draft); }}><CheckCircle2 size={15} /> Salvar nova versão</button><div className="description-version-list">{(order.descriptionHistory ?? [{ id: "legacy", text: order.description, createdAt: "Versão atual" }]).map((revision, index) => <article key={revision.id}><span>{index === 0 ? "Atual" : `Versão ${index + 1}`}</span><p>{revision.text}</p><small>{revision.createdAt}</small></article>)}</div></section>; }
 
 function FinanceView({ onOpen }: { onOpen: (kind: RecordKind) => void }) { const data = useDemoData(); const [filter, setFilter] = useState<"all" | FinanceRecord["type"]>("all"); const list = data.finance.filter((item) => filter === "all" || item.type === filter); const incoming = data.finance.filter((item) => item.type === "receivable" && item.status !== "paid").reduce((sum, item) => sum + item.amountCents, 0); const outgoing = data.finance.filter((item) => item.type === "payable" && item.status !== "paid").reduce((sum, item) => sum + item.amountCents, 0); return <section className="panel full-panel"><PanelHeader eyebrow="Fluxo conectado ao fechamento" title="Financeiro" action="Novo lançamento" onAction={() => onOpen("finance")} /><div className="finance-summary-grid"><Summary label="Entradas previstas" value={formatBRL(incoming)} detail={`${data.finance.filter((item) => item.type === "receivable" && item.status !== "paid").length} títulos em aberto`} /><Summary label="Saídas previstas" value={formatBRL(outgoing)} detail={`${data.finance.filter((item) => item.type === "payable" && item.status !== "paid").length} despesas abertas`} tone="out" /><Summary label="Resultado estimado" value={formatBRL(incoming - outgoing)} detail="Antes de impostos e retiradas" tone="result" /></div><div className="view-toolbar"><div className="filter-pills"><button type="button" className={`filter-pill ${filter === "all" ? "filter-pill-active" : ""}`} onClick={() => setFilter("all")}>Todos</button><button type="button" className={`filter-pill ${filter === "receivable" ? "filter-pill-active" : ""}`} onClick={() => setFilter("receivable")}>A receber</button><button type="button" className={`filter-pill ${filter === "payable" ? "filter-pill-active" : ""}`} onClick={() => setFilter("payable")}>A pagar</button></div></div><div className="finance-list">{list.map((item) => <div className="finance-row" key={item.id}><div className={`finance-type finance-type-${item.type}`}>{item.type === "receivable" ? <ArrowUpRight size={17} /> : <ArrowDownRight size={17} />}</div><div className="finance-info"><strong>{item.title}</strong><span>{item.party} · Vence {item.dueDate}{item.originId ? " · origem OS" : ""}</span></div><strong className={item.type === "receivable" ? "value-in" : "value-out"}>{item.type === "receivable" ? "+" : "−"} {formatBRL(item.amountCents)}</strong><StatusPill status={item.status} /></div>)}</div></section>; }
 function Summary({ label, value, detail, tone = "" }: { label: string; value: string; detail: string; tone?: "" | "out" | "result" }) { return <div className={`finance-summary-card ${tone ? `finance-summary-${tone}` : ""}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>; }
 
 function StockView({ onOpen }: { onOpen: (kind: RecordKind) => void }) { const data = useDemoData(); const [query, setQuery] = useState(""); const list = data.stock.filter((item) => `${item.name} ${item.category} ${item.location}`.toLowerCase().includes(query.toLowerCase())); const low = data.stock.filter((item) => item.quantity < item.minimum).length; return <section className="panel full-panel"><PanelHeader eyebrow="Estoque principal" title="Materiais e ferramentas" action="Adicionar item" onAction={() => onOpen("stock")} /><div className="stock-summary"><div><PackageCheck size={18} /><span>Itens cadastrados<strong>{data.stock.length}</strong></span></div><div><Wrench size={18} /><span>Ferramentas<strong>{data.stock.filter((item) => item.category === "tool").length}</strong></span></div><div className="stock-alert"><Activity size={18} /><span>Abaixo do mínimo<strong>{low}</strong></span></div></div><div className="view-toolbar"><label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar item, categoria ou local" /></label></div><div className="stock-list">{list.map((item) => <div className="stock-row" key={item.id}><div className={`stock-symbol stock-symbol-${item.category}`}>{item.category === "tool" ? <Wrench size={17} /> : item.category === "resale" ? <PackageCheck size={17} /> : <Boxes size={17} />}</div><div className="stock-info"><strong>{item.name}</strong><span>{item.location} · {item.category === "tool" ? "Ferramenta" : item.category === "resale" ? "Revenda" : "Consumo"}</span></div><div className={`stock-quantity ${item.quantity < item.minimum ? "stock-low" : ""}`}><strong>{item.quantity} {item.unit}</strong><small>{item.quantity < item.minimum ? "Repor em breve" : `Mínimo ${item.minimum} ${item.unit}`}</small></div></div>)}</div></section>; }
 
-function ClientsView({ onOpen }: { onOpen: (kind: RecordKind) => void }) { const data = useDemoData(); const [query, setQuery] = useState(""); const [sort, setSort] = useState<"name" | "history">("name"); const list = useMemo(() => data.clients.filter((item) => `${item.name} ${item.document} ${item.phone} ${item.city}`.toLowerCase().includes(query.toLowerCase())).sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : b.history.length - a.history.length), [data.clients, query, sort]); return <section className="panel full-panel"><PanelHeader eyebrow={`${data.clients.length} pessoas e empresas`} title="Clientes" action="Novo cliente" onAction={() => onOpen("client")} /><div className="view-toolbar"><label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nome, CPF/CNPJ, telefone ou cidade" /></label><label className="table-select">Ordenar por<select value={sort} onChange={(event) => setSort(event.target.value as "name" | "history")}><option value="name">Nome</option><option value="history">Histórico</option></select></label></div><div className="directory-table"><div className="directory-head"><span>Cliente</span><span>Contato</span><span>Localidade</span><span>Histórico</span></div>{list.map((client) => <article className="directory-record" key={client.id}><span className={`client-avatar client-${client.tone}`}>{client.initials}</span><div><strong>{client.name}</strong><small>{client.kind === "pj" ? "Pessoa jurídica" : "Pessoa física"}{client.document ? ` · ${client.document}` : ""}</small></div><div><strong>{client.phone || "Sem telefone"}</strong><small>{client.email || "Sem e-mail"}</small></div><div><strong>{client.city || "Cidade não informada"}{client.state ? ` · ${client.state}` : ""}</strong><small>{client.address || "Endereço não informado"}</small></div><div><strong>{client.history.length} evento(s)</strong><small>{client.history[0] || "Sem histórico"}</small></div></article>)}{!list.length && <EmptyState message="Nenhum cliente corresponde à busca." />}</div></section>; }
+function ClientsView({ onOpen }: { onOpen: (kind: RecordKind) => void }) { const data = useDemoData(); const [query, setQuery] = useState(""); const [sort, setSort] = useState<"name" | "history">("name"); const list = useMemo(() => data.clients.filter((item) => `${item.name} ${item.document} ${item.phone} ${item.city}`.toLowerCase().includes(query.toLowerCase())).sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : b.history.length - a.history.length), [data.clients, query, sort]); return <section className="panel full-panel"><PanelHeader eyebrow={`${data.clients.length} pessoas e empresas`} title="Clientes" action="Novo cliente" onAction={() => onOpen("client")} /><div className="view-toolbar"><label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nome, CPF/CNPJ, telefone ou cidade" /></label><label className="table-select">Ordenar por<select value={sort} onChange={(event) => setSort(event.target.value as "name" | "history")}><option value="name">Nome</option><option value="history">Histórico</option></select></label></div><div className="directory-table"><div className="directory-head"><span>Cliente</span><span>Contato</span><span>Localidade</span><span>Histórico</span></div>{list.map((client) => <article className="directory-record" key={client.id}><span className={`client-avatar client-${client.tone}`}>{client.initials}</span><div><strong>{client.name}</strong><small>{client.kind === "pj" ? "Pessoa jurídica" : "Pessoa física"}{client.document ? ` · ${client.document}` : ""}</small></div><div><strong>{client.phone || "Sem telefone"}</strong><small>{client.email || "Sem e-mail"}</small><WhatsAppLink phone={client.phone} label="Conversar no WhatsApp" message={`Olá, ${client.name}! Aqui é da sua equipe de atendimento. Como podemos ajudar?`} /></div><div><strong>{client.city || "Cidade não informada"}{client.state ? ` · ${client.state}` : ""}</strong><small>{client.address || "Endereço não informado"}</small></div><div><strong>{client.history.length} evento(s)</strong><small>{client.history[0] || "Sem histórico"}</small></div></article>)}{!list.length && <EmptyState message="Nenhum cliente corresponde à busca." />}</div></section>; }
 
-function SuppliersView({ onOpen }: { onOpen: (kind: RecordKind) => void }) { const data = useDemoData(); const [query, setQuery] = useState(""); const list = data.suppliers.filter((item) => `${item.name} ${item.category} ${item.city} ${item.document}`.toLowerCase().includes(query.toLowerCase())); return <section className="panel full-panel"><PanelHeader eyebrow={`${data.suppliers.length} fornecedores cadastrados`} title="Fornecedores" action="Novo fornecedor" onAction={() => onOpen("supplier")} /><div className="view-toolbar"><label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Fornecedor, CNPJ, categoria ou cidade" /></label></div><div className="directory-table"><div className="directory-head"><span>Fornecedor</span><span>Categoria</span><span>Contato</span><span>Localidade</span></div>{list.map((supplier) => <article className="directory-record" key={supplier.id}><span className={`client-avatar client-${supplier.tone}`}>{supplier.initials}</span><div><strong>{supplier.name}</strong><small>{supplier.document || "Documento não informado"}</small></div><div><strong>{supplier.category}</strong><small>Cadastro ativo</small></div><div><strong>{supplier.phone || "Sem telefone"}</strong><small>{supplier.email || "Sem e-mail"}</small></div><div><strong>{supplier.city || "Cidade não informada"}{supplier.state ? ` · ${supplier.state}` : ""}</strong><small>{supplier.address || "Endereço não informado"}</small></div></article>)}{!list.length && <EmptyState message="Nenhum fornecedor corresponde à busca." />}</div></section>; }
+function SuppliersView({ onOpen }: { onOpen: (kind: RecordKind) => void }) { const data = useDemoData(); const [query, setQuery] = useState(""); const list = data.suppliers.filter((item) => `${item.name} ${item.category} ${item.city} ${item.document}`.toLowerCase().includes(query.toLowerCase())); return <section className="panel full-panel"><PanelHeader eyebrow={`${data.suppliers.length} fornecedores cadastrados`} title="Fornecedores" action="Novo fornecedor" onAction={() => onOpen("supplier")} /><div className="view-toolbar"><label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Fornecedor, CNPJ, categoria ou cidade" /></label></div><div className="directory-table"><div className="directory-head"><span>Fornecedor</span><span>Categoria</span><span>Contato</span><span>Localidade</span></div>{list.map((supplier) => <article className="directory-record" key={supplier.id}><span className={`client-avatar client-${supplier.tone}`}>{supplier.initials}</span><div><strong>{supplier.name}</strong><small>{supplier.document || "Documento não informado"}</small></div><div><strong>{supplier.category}</strong><small>Cadastro ativo</small></div><div><strong>{supplier.phone || "Sem telefone"}</strong><small>{supplier.email || "Sem e-mail"}</small><WhatsAppLink phone={supplier.phone} label="Lembrar pelo WhatsApp" message={`Olá, ${supplier.name}! Precisamos confirmar uma informação sobre o fornecimento. Pode nos retornar, por favor?`} /></div><div><strong>{supplier.city || "Cidade não informada"}{supplier.state ? ` · ${supplier.state}` : ""}</strong><small>{supplier.address || "Endereço não informado"}</small></div></article>)}{!list.length && <EmptyState message="Nenhum fornecedor corresponde à busca." />}</div></section>; }
 
-function ReportsView() { const data = useDemoData(); const [draft, setDraft] = useState(""); const receivable = data.finance.filter((item) => item.type === "receivable").reduce((sum, item) => sum + item.amountCents, 0); const payable = data.finance.filter((item) => item.type === "payable").reduce((sum, item) => sum + item.amountCents, 0); const generate = () => { const order = data.workOrders.find((item) => item.diary.length) ?? data.workOrders[0]; if (!order) return; setDraft(`Prévia estruturada — ${order.id}\nCliente: ${order.client}\nServiço: ${order.service}\nEscopo: ${order.description}\nDiário: ${order.diary.map((entry) => entry.text).join(" | ") || "Sem registros adicionais."}\nMateriais vinculados: ${order.materialLines.length ? order.materialLines.map((entry) => `${entry.quantity} item(ns)`).join(", ") : "Não informados."}\nFechamento: ${order.status === "completed" ? "concluído e lançado no financeiro" : "pendente de fechamento"}.`); };
+function ReportsView() { const data = useDemoData(); const [draft, setDraft] = useState(""); const receivable = data.finance.filter((item) => item.type === "receivable").reduce((sum, item) => sum + item.amountCents, 0); const payable = data.finance.filter((item) => item.type === "payable").reduce((sum, item) => sum + item.amountCents, 0); const generate = () => { const order = data.workOrders.find((item) => item.diary.length) ?? data.workOrders[0]; if (!order) return; const descriptionHistory = (order.descriptionHistory ?? [{ id: "legacy", text: order.description, createdAt: "Versão atual" }]).map((revision) => `${revision.createdAt}: ${revision.text}`).join(" | "); setDraft(`Prévia estruturada — ${order.id}\nCliente: ${order.client}\nServiço: ${order.service}\nDescrição atual: ${order.description}\nHistórico de alterações: ${descriptionHistory}\nDiário: ${order.diary.map((entry) => entry.text).join(" | ") || "Sem registros adicionais."}\nMateriais vinculados: ${order.materialLines.length ? order.materialLines.map((entry) => `${entry.quantity} item(ns)`).join(", ") : "Não informados."}\nFechamento: ${order.status === "completed" ? "concluído e lançado no financeiro" : "pendente de fechamento"}.`); };
   return <section className="panel full-panel"><PanelHeader eyebrow="Dados operacionais consolidados" title="Relatórios" action="Gerar prévia" onAction={generate} /><div className="report-metrics"><ReportMetric label="Receitas registradas" value={formatBRL(receivable)} detail={`${data.finance.filter((item) => item.type === "receivable").length} lançamentos`} /><ReportMetric label="Despesas registradas" value={formatBRL(payable)} detail={`${data.finance.filter((item) => item.type === "payable").length} lançamentos`} negative /><ReportMetric label="Resultado estimado" value={formatBRL(receivable - payable)} detail="Dados atuais" /><ReportMetric label="OS concluídas" value={String(data.workOrders.filter((item) => item.status === "completed").length)} detail={`de ${data.workOrders.length} ordens`} /></div><div className="report-chart"><div className="report-chart-head"><strong>Relatório por serviço</strong><span><i /> Base operacional</span></div><p className="report-explainer">A prévia compila escopo, diário, materiais e fechamento. A IA real deve usar esta mesma base, em rota server-side com limite de uso e revisão humana antes de enviar ao cliente.</p><button className="primary-button" type="button" onClick={generate}><Sparkles size={16} /> Montar prévia de relatório</button>{draft && <pre className="report-draft">{draft}</pre>}</div></section>; }
 function ReportMetric({ label, value, detail, negative }: { label: string; value: string; detail: string; negative?: boolean }) { return <div><span>{label}</span><strong>{value}</strong><small className={negative ? "report-negative" : ""}>{detail}</small></div>; }
 
