@@ -2,13 +2,33 @@
 
 import { ArrowRight, CheckCircle2, LoaderCircle, ShieldCheck, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { isFirebaseClientConfigured, signInWithGoogle } from "@/src/lib/firebase-client";
+import { useEffect, useState } from "react";
+import { getGoogleRedirectToken, isFirebaseClientConfigured, startGoogleSignIn } from "@/src/lib/firebase-client";
 
 export function LoginView() {
   const router = useRouter();
   const [message, setMessage] = useState("A entrada é liberada por convite da Central Admin.");
   const [loading, setLoading] = useState(false);
+
+  async function establishSession(token: string) {
+    const response = await fetch("/api/auth/invitation/verify", { method: "POST", headers: { authorization: `Bearer ${token}` } });
+    const result = await response.json() as { allowed?: boolean; error?: string };
+    if (!response.ok || !result.allowed) throw new Error(result.error ?? "Convite não autorizado.");
+    router.push("/");
+  }
+
+  useEffect(() => {
+    if (!isFirebaseClientConfigured) return;
+    let active = true;
+    getGoogleRedirectToken().then((token) => {
+      if (!token || !active) return;
+      setLoading(true);
+      return establishSession(token).catch((error) => { if (active) setMessage(error instanceof Error ? error.message : "Não foi possível validar o acesso."); }).finally(() => { if (active) setLoading(false); });
+    }).catch((error) => {
+      if (active && error instanceof Error && !error.message.includes("no-auth-event")) setMessage(error.message);
+    });
+    return () => { active = false; };
+  }, [router]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -18,11 +38,7 @@ export function LoginView() {
   async function handleGoogle() {
     setLoading(true); setMessage("");
     try {
-      const token = await signInWithGoogle();
-      const response = await fetch("/api/auth/invitation/verify", { method: "POST", headers: { authorization: `Bearer ${token}` } });
-      const result = await response.json() as { allowed?: boolean; error?: string };
-      if (!response.ok || !result.allowed) throw new Error(result.error ?? "Convite não autorizado.");
-      router.push("/");
+      await startGoogleSignIn();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Não foi possível validar o acesso.");
     } finally { setLoading(false); }
