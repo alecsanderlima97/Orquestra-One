@@ -40,7 +40,10 @@ export function LoginView() {
     try {
       let token: string;
       try {
-        token = await signInWithGoogle();
+        token = await Promise.race([
+          signInWithGoogle(),
+          new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("auth/popup-timeout")), 2500)),
+        ]);
       } catch (popupError) {
         const popupMessage = popupError instanceof Error ? popupError.message : "";
         if (!popupMessage.includes("popup") && !popupMessage.includes("operation-not-supported")) throw popupError;
