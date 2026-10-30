@@ -147,7 +147,7 @@
 .agenda-week-hour { height: 66px; box-sizing: border-box; border-top: 1px solid #edf0f4; padding: 10px 6px; color: #9aa5b3; font-size: 8px; }
 .agenda-week-column { min-height: 0; }
 .agenda-week-day { min-height: 56px; box-sizing: border-box; }
-.agenda-week-column-body { position: relative; min-height: 0; height: 858px; padding: 0; overflow: hidden; background: transparent; }
+.agenda-week-column-body { position: relative; min-height: 0; height: 1188px; padding: 0; overflow: hidden; background: transparent; }
 .agenda-week-time-slot { position: absolute; left: 0; right: 0; height: 66px; box-sizing: border-box; border-top: 1px solid #f0f2f5; padding: 0 7px; background: repeating-linear-gradient(to bottom, transparent 0, transparent 32px, rgba(244,246,248,.7) 33px); }
 .agenda-week-column-body .agenda-appointment-card { position: absolute; left: 7px; right: 7px; width: calc(100% - 14px); min-height: 0; box-sizing: border-box; z-index: 2; overflow: hidden; cursor: grab; touch-action: none; }
 .agenda-week-column-body .agenda-appointment-card:active { cursor: grabbing; }

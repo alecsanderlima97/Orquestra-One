@@ -37,9 +37,9 @@ type Status = "in_progress" | "waiting" | "completed" | "confirmed" | "pending" 
 type AgendaMode = "day" | "week" | "month";
 
 const DEMO_TODAY = "2026-10-29";
-const AGENDA_HOURS = Array.from({ length: 13 }, (_, index) => `${String(index + 7).padStart(2, "0")}:00`);
+const AGENDA_HOURS = [...Array.from({ length: 17 }, (_, index) => `${String(index + 7).padStart(2, "0")}:00`), "00:00"];
 const AGENDA_START_MINUTES = 7 * 60;
-const AGENDA_END_MINUTES = 20 * 60;
+const AGENDA_END_MINUTES = 25 * 60;
 const AGENDA_HOUR_HEIGHT = 66;
 const AGENDA_SNAP_MINUTES = 30;
 
@@ -106,7 +106,7 @@ function appointmentHour(appointment: AppointmentRecord) {
 
 function appointmentMinutes(appointment: AppointmentRecord) {
   const [hours, minutes] = appointment.time.split(":").map(Number);
-  return hours * 60 + minutes;
+  return (hours === 0 ? 24 : hours) * 60 + minutes;
 }
 
 function appointmentDurationMinutes(appointment: AppointmentRecord) {
@@ -125,7 +125,7 @@ function clampAgendaMinutes(value: number, minimum: number, maximum: number) {
 }
 
 function formatAgendaTime(minutes: number) {
-  const hours = Math.floor(minutes / 60);
+  const hours = Math.floor(minutes / 60) % 24;
   const remainder = minutes % 60;
   return `${String(hours).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }
@@ -278,7 +278,7 @@ function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => voi
       </div>
     </div>
     <div className="agenda-toolbar-bottom">
-      <span><CalendarDays size={15} /> {mode === "day" ? "Visualização diária" : mode === "week" ? "Arraste para mover · use a seta ↕ para ajustar a duração" : "Visão ampla do mês"}</span>
+      <span><CalendarDays size={15} /> {mode === "day" ? "Visualização diária" : mode === "week" ? "Agenda até 00:00 · arraste para mover e use a seta ↕ para ajustar" : "Visão ampla do mês"}</span>
       <div className="agenda-professional-legend" aria-label="Legenda de responsáveis">{professionals.map((professional) => <span key={professional}><i className={`agenda-professional-dot agenda-professional-${professionalColor(professional)}`} />{professional}</span>)}</div>
       <label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente, serviço ou endereço" aria-label="Filtrar agenda" /></label>
     </div>
