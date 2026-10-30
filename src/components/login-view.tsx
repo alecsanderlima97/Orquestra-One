@@ -3,7 +3,7 @@
 import { ArrowRight, CheckCircle2, LoaderCircle, ShieldCheck, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getGoogleRedirectToken, isFirebaseClientConfigured, startGoogleSignIn } from "@/src/lib/firebase-client";
+import { getGoogleRedirectToken, isFirebaseClientConfigured, signInWithGoogle, startGoogleSignIn } from "@/src/lib/firebase-client";
 
 export function LoginView() {
   const router = useRouter();
@@ -38,7 +38,16 @@ export function LoginView() {
   async function handleGoogle() {
     setLoading(true); setMessage("");
     try {
-      await startGoogleSignIn();
+      let token: string;
+      try {
+        token = await signInWithGoogle();
+      } catch (popupError) {
+        const popupMessage = popupError instanceof Error ? popupError.message : "";
+        if (!popupMessage.includes("popup") && !popupMessage.includes("operation-not-supported")) throw popupError;
+        await startGoogleSignIn();
+        return;
+      }
+      await establishSession(token);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Não foi possível validar o acesso.");
     } finally { setLoading(false); }
