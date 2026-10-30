@@ -80,7 +80,8 @@ export async function POST(request: NextRequest) {
     const result = NextResponse.json({ allowed: true, tenantId: tenantId ?? null, role: role ?? null });
     result.cookies.set("orquestra_one_session", session, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 60 * 60 * 8, path: "/" });
     return result;
-  } catch {
+  } catch (error) {
+    console.error("[auth/invitation/verify]", error instanceof Error ? error.message : "unknown_error");
     return NextResponse.json({ error: "Não foi possível validar o convite agora. Tente novamente." }, { status: 401 });
   }
 }
