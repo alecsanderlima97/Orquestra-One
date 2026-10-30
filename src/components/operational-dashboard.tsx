@@ -177,7 +177,6 @@ function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => voi
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>();
   const weekStart = startOfAgendaWeek(selectedDate);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => moveAgendaDate(weekStart, index)), [weekStart]);
-  const carouselDays = useMemo(() => Array.from({ length: 7 }, (_, index) => moveAgendaDate(selectedDate, index - 3)), [selectedDate]);
   const list = useMemo(() => data.appointments.filter((item) => {
     const matchesPeriod = mode === "day"
       ? item.date === selectedDate
@@ -213,22 +212,17 @@ function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => voi
     <PanelHeader eyebrow={`${list.length} compromisso(s) no período`} title="Calendário operacional" action="Novo agendamento" onAction={() => onOpen("appointment")} />
     <div className="agenda-controls">
       <div className="agenda-period-navigation">
-        <button className="icon-button agenda-nav-button" type="button" onClick={() => shiftPeriod(-1)} aria-label="Período anterior"><ChevronLeft size={17} /></button>
+        <button className="icon-button agenda-nav-button" type="button" onClick={() => shiftPeriod(-1)} aria-label={mode === "day" ? "Dia anterior" : mode === "week" ? "Semana anterior" : "Mês anterior"}><ChevronLeft size={17} /></button>
         <button className="agenda-today-button" type="button" onClick={() => chooseDate(DEMO_TODAY)}>Hoje</button>
-        <button className="icon-button agenda-nav-button" type="button" onClick={() => shiftPeriod(1)} aria-label="Próximo período"><ChevronRight size={17} /></button>
+        <button className="icon-button agenda-nav-button" type="button" onClick={() => shiftPeriod(1)} aria-label={mode === "day" ? "Próximo dia" : mode === "week" ? "Próxima semana" : "Próximo mês"}><ChevronRight size={17} /></button>
         <strong>{periodLabel}</strong>
       </div>
       <div className="agenda-view-switcher" role="tablist" aria-label="Modo de visualização da agenda">
         {(["day", "week", "month"] as AgendaMode[]).map((item) => <button key={item} className={mode === item ? "agenda-view-active" : ""} type="button" role="tab" aria-selected={mode === item} onClick={() => setMode(item)}>{item === "day" ? "Dia" : item === "week" ? "Semana" : "Mês"}</button>)}
       </div>
     </div>
-    <div className="agenda-date-carousel">
-      <button className="icon-button agenda-carousel-arrow" type="button" onClick={() => chooseDate(moveAgendaDate(selectedDate, -1))} aria-label="Dia anterior"><ChevronLeft size={16} /></button>
-      <div className="agenda-date-strip">{carouselDays.map((date) => <button key={date} className={`agenda-date-card ${date === selectedDate ? "agenda-date-card-active" : ""}`} type="button" onClick={() => chooseDate(date)}><span>{agendaShortWeekday(date)}</span><strong>{parseAgendaDate(date).getDate()}</strong><small>{data.appointments.filter((item) => item.date === date).length ? `${data.appointments.filter((item) => item.date === date).length} ag.` : "livre"}</small></button>)}</div>
-      <button className="icon-button agenda-carousel-arrow" type="button" onClick={() => chooseDate(moveAgendaDate(selectedDate, 1))} aria-label="Próximo dia"><ChevronRight size={16} /></button>
-    </div>
     <div className="agenda-toolbar-bottom">
-      <span><CalendarDays size={15} /> {mode === "day" ? "Visualização diária" : mode === "week" ? "Semana com horários e compromissos" : "Visão ampla do mês"}</span>
+      <span><CalendarDays size={15} /> {mode === "day" ? "Visualização diária" : mode === "week" ? "Semana com horários e compromissos · use as setas para trocar a semana" : "Visão ampla do mês"}</span>
       <label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente, serviço ou endereço" aria-label="Filtrar agenda" /></label>
     </div>
     <div className="agenda-calendar-layout">
