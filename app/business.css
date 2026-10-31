@@ -1,0 +1,70 @@
+/* Telas de negócio: ordens, financeiro, estoque, clientes, fornecedores, relatórios, equipe */
+.view-hint { margin: 0 0 12px; color: #7d8f84; font-size: 12px; }
+.view-toolbar-tight { margin-top: -6px; }
+.row-openable { cursor: default; }
+.row-openable:hover { background: #fbfefc; }
+.row-openable:focus-visible { outline: 2px solid #55a477; outline-offset: -2px; }
+.row-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.table-action-danger { color: #b42318; }
+.table-action-danger:hover { border-color: #e9a8a0; background: #fef3f2; }
+.material-add-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(70px, .6fr) auto; gap: 10px; align-items: end; margin-top: 10px; }
+.summary-textarea { min-height: 280px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; line-height: 1.5; }
+.report-draft { white-space: pre-wrap; }
+
+/* Clientes e fornecedores */
+.people-list { display: grid; }
+.people-row { display: grid; grid-template-columns: 38px minmax(150px, 1.1fr) minmax(120px, .9fr) minmax(130px, 1fr) minmax(110px, .8fr) auto; align-items: center; gap: 12px; padding: 13px 4px; border-top: 1px solid #eef1f4; }
+.people-row:first-child { border-top: 0; }
+.people-main, .people-cell { min-width: 0; }
+.people-main strong, .people-cell strong, .people-main small, .people-cell small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.people-main strong, .people-cell strong { color: #3b4a5d; font-size: 12px; }
+.people-main small, .people-cell small { margin-top: 3px; color: #8f9bab; font-size: 11px; }
+
+/* Relatórios */
+.report-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+.report-bars { display: grid; gap: 12px; margin: 10px 0 0; padding: 0; list-style: none; }
+.report-bars li { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(60px, 1.4fr) auto; align-items: center; gap: 10px; font-size: 12px; color: #44536a; }
+.report-bars small { display: block; color: #8f9bab; font-size: 10px; }
+.report-bars div { height: 8px; overflow: hidden; border-radius: 99px; background: #eef3f0; }
+.report-bars i { display: block; height: 100%; border-radius: 99px; background: #5fae82; }
+.report-badge { border-radius: 99px; padding: 3px 9px; color: #8a5f1e; background: #fbf0dc; font-size: 11px; font-weight: 700; }
+.report-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.report-order-pick { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+.report-chart + .report-chart { margin-top: 14px; }
+
+/* Equipe */
+.access-dot { display: inline-block; min-width: 40px; border-radius: 99px; padding: 3px 8px; font-size: 11px; font-weight: 700; text-align: center; }
+.access-edit { color: #1f6b46; background: #e3f5ea; }
+.access-view { color: #3d6288; background: #e8f1fa; }
+.access-none { color: #a3adb8; background: #f2f4f6; }
+.access-matrix { display: grid; gap: 4px; margin-top: 12px; overflow-x: auto; }
+.access-matrix-row { display: grid; grid-template-columns: minmax(120px, 1.2fr) repeat(8, minmax(64px, 1fr)); align-items: center; gap: 6px; min-width: 760px; padding: 8px 4px; border-top: 1px solid #eef1f4; font-size: 12px; }
+.access-matrix-head { border-top: 0; color: #8f9bab; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.access-matrix-row small { display: block; color: #8f9bab; font-size: 10px; }
+.role-description { margin-top: 6px; padding: 12px; border-radius: 10px; background: #f6fbf8; }
+.role-description p { margin: 0 0 8px; color: #4b5d6f; font-size: 13px; }
+.role-access-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; margin: 0; padding: 0; list-style: none; }
+.role-access-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: #4b5d6f; }
+.invite-row .row-actions { grid-column: 1 / -1; justify-content: flex-start; }
+.team-row .row-actions { grid-column: 1 / -1; justify-content: flex-start; }
+
+@media (max-width: 760px) {
+  .people-row { grid-template-columns: 38px minmax(0, 1fr); gap: 4px 10px; }
+  .people-row > .people-cell { grid-column: 2; }
+  .people-row > .row-actions { grid-column: 1 / -1; justify-content: flex-start; margin-top: 6px; }
+  .row-actions { justify-content: flex-start; }
+  .row-actions .table-action { min-height: 38px; padding-left: 12px; padding-right: 12px; }
+  .material-add-row { grid-template-columns: 1fr 1fr; }
+  .material-add-row .secondary-button { grid-column: 1 / -1; }
+  .report-columns, .role-access-list { grid-template-columns: 1fr; }
+  .report-order-pick { grid-template-columns: 1fr; }
+  .summary-textarea { min-height: 240px; font-size: 14px; }
+  .view-toolbar { flex-wrap: wrap; }
+  .orders-table .table-head { display: none; }
+  .orders-table .order-row { grid-template-columns: 52px minmax(0, 1fr) auto; row-gap: 8px; }
+  .orders-table .order-info { text-align: left; }
+  .operational-order-row .status-pill { display: inline-flex; grid-column: 2 / -1; justify-self: start; }
+  .orders-table .order-row > .row-actions { grid-column: 1 / -1; }
+  .stock-list .stock-row { flex-wrap: wrap; }
+  .stock-list .stock-row > .row-actions, .finance-list .finance-row > .row-actions { flex-basis: 100%; }
+}

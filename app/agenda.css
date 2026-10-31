@@ -175,3 +175,172 @@
   .agenda-week-column-body .agenda-appointment-card { left: 5px; right: 5px; width: calc(100% - 10px); }
   .agenda-resize-handle { width: 38px; height: 20px; }
 }
+
+.agenda-conflict-badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; background: #fff1e6; color: #9a3412; font-size: 12px; font-weight: 600; }
+.agenda-conflict-note { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: #fff1e6; border: 1px solid #fdba74; color: #9a3412; font-size: 13px; }
+.agenda-conflict-note p { margin: 4px 0 0; }
+.agenda-status-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.agenda-edit-form { display: grid; gap: 10px; margin-top: 4px; }
+.agenda-edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.agenda-edit-error { margin: 0; color: #b42318; font-size: 13px; }
+
+/* Horário final, histórico do diário e ordem/cliente da agenda */
+.agenda-edit-hint { margin: 0; color: #327a55; font-size: 12px; font-weight: 600; }
+.diary-history { border: 1px solid #e1ebe5; border-radius: 10px; background: #fbfefc; padding: 12px 14px; }
+.diary-history-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 10px; color: #344f40; font-size: 13px; }
+.diary-history-head span { color: #7d9485; }
+.diary-history h4 { margin: 10px 0 6px; color: #6c8576; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.diary-history ol { display: grid; gap: 8px; max-height: 240px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.diary-history li { border: 1px solid #ebf0ed; border-radius: 8px; padding: 8px 10px; background: #fff; }
+.diary-history time { display: block; color: #8aa396; font-size: 11px; }
+.diary-history li p { margin: 3px 0 0; color: #405548; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+.diary-history-empty { margin: 8px 0 0; color: #8aa396; font-size: 12px; }
+
+.record-dialog.order-detail-dialog { width: min(780px, 100%); }
+.order-detail-body { display: grid; gap: 14px; }
+.order-detail-section { border: 1px solid #e6ede9; border-radius: 10px; padding: 14px; background: #fff; }
+.order-detail-section h3 { margin: 0 0 10px; color: #344f40; font-size: 14px; }
+.order-detail-subtitle { margin: 14px 0 0; color: #6c8576; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.order-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 0; }
+.order-detail-grid dt { color: #8aa396; font-size: 11px; }
+.order-detail-grid dd { margin: 3px 0 0; color: #405548; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.order-detail-wide { grid-column: 1 / -1; }
+.order-detail-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; color: #405548; font-size: 13px; }
+.order-detail-meta small { color: #8aa396; font-size: 11px; }
+.order-detail-list { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.order-detail-list li { border: 1px solid #ebf0ed; border-radius: 8px; padding: 8px 10px; background: #fbfefc; color: #405548; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+.order-detail-list time, .order-detail-list small { display: block; color: #8aa396; font-size: 11px; }
+.order-detail-empty { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 0; color: #6c8576; font-size: 13px; }
+.order-detail-empty p { margin: 0; }
+
+/* Celular: texto legível, semana rolável com eixo de horas fixo e alça de duração sempre visível */
+@media (max-width: 760px) {
+  .order-detail-grid, .agenda-edit-grid { grid-template-columns: 1fr; }
+  .agenda-card-time { font-size: 12px; }
+  .agenda-card-copy strong { font-size: 13px; }
+  .agenda-card-copy > span { font-size: 12px; }
+  .agenda-card-copy small { font-size: 11px; }
+  .agenda-hour-label, .agenda-free-slot { font-size: 11px; }
+  .agenda-view-switcher button, .agenda-today-button { padding: 9px 12px; font-size: 12px; }
+  .agenda-nav-button { width: 38px; height: 38px; }
+  .agenda-period-navigation strong { font-size: 13px; }
+  .agenda-toolbar-bottom > span, .agenda-professional-legend { font-size: 11px; }
+  .agenda-calendar-caption h3 { font-size: 16px; }
+  .agenda-calendar-caption > span { font-size: 11px; }
+  .agenda-details { padding: 14px; }
+  .agenda-details-head h3 { font-size: 17px; }
+  .agenda-details-head > div > span { font-size: 12px; }
+  .agenda-detail-list strong { font-size: 13px; }
+  .agenda-detail-list small, .agenda-notes small { font-size: 11px; }
+  .agenda-notes p { font-size: 12px; }
+  .agenda-detail-actions button { padding: 12px 10px; font-size: 13px; }
+  .agenda-week-grid { grid-template-columns: 48px repeat(7, minmax(136px, 1fr)); min-width: 0; }
+  .agenda-week-axis { position: sticky; left: 0; z-index: 3; box-shadow: 1px 0 0 #edf0f4; }
+  .agenda-week-hour, .agenda-week-axis-head { font-size: 11px; }
+  .agenda-week-day span { font-size: 11px; }
+  .agenda-week-day strong { font-size: 20px; }
+  .agenda-week-day small { font-size: 10px; }
+  .agenda-week-column-body .agenda-appointment-card-compact .agenda-card-time { font-size: 11px; }
+  .agenda-week-column-body .agenda-appointment-card-compact .agenda-card-copy strong { font-size: 12px; }
+  .agenda-week-column-body .agenda-appointment-card-compact .agenda-card-copy > span { font-size: 11px; }
+  .agenda-resize-handle { width: 52px; height: 26px; }
+}
+
+@media (hover: none) {
+  .agenda-resize-handle { opacity: 1; }
+}
+
+@media (pointer: coarse) {
+  .agenda-week-column-body .agenda-appointment-card { touch-action: pan-x pan-y; }
+  .agenda-week-column-body .agenda-resize-handle { touch-action: none; }
+}
+
+/* Ditado por voz */
+.field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.voice-control { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.voice-button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #cfe3d6; border-radius: 999px; padding: 6px 12px; color: #2d7653; background: #f2faf5; font-size: 12px; font-weight: 700; cursor: pointer; }
+.voice-button:hover { border-color: #9fceb0; }
+.voice-button-on { border-color: #e9a8a0; color: #b42318; background: #fef3f2; animation: voice-pulse 1.4s ease-in-out infinite; }
+@keyframes voice-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(180, 35, 24, .25); } 50% { box-shadow: 0 0 0 6px rgba(180, 35, 24, 0); } }
+.voice-hint { color: #6c8576; font-size: 11px; font-weight: 500; }
+.voice-message { max-width: 260px; color: #b42318; font-size: 11px; font-weight: 500; text-align: right; }
+
+/* Visão Dia com a mesma grade arrastável da semana + semana no celular */
+.agenda-week-view { scroll-snap-type: x proximity; scroll-padding-left: 56px; }
+.agenda-week-column { scroll-snap-align: start; }
+.agenda-week-view-single .agenda-week-grid { grid-template-columns: 56px minmax(0, 1fr); min-width: 0; }
+
+/* Busca global, notificações e financeiro */
+.search-box-wrap, .notification-wrap { position: relative; }
+.search-results, .notification-popover { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; width: min(340px, 92vw); max-height: 380px; margin: 0; padding: 6px; overflow-y: auto; list-style: none; border: 1px solid #e6ede9; border-radius: 10px; background: #fff; box-shadow: 0 12px 30px rgba(12, 25, 45, .14); }
+.search-results button, .notification-popover button { display: grid; width: 100%; gap: 2px; border: 0; border-radius: 8px; padding: 9px 10px; background: transparent; text-align: left; cursor: pointer; }
+.search-results button:hover, .notification-popover li button:hover { background: #f2faf5; }
+.search-results li, .notification-popover li { list-style: none; }
+.search-results strong, .notification-popover strong { color: #35445a; font-size: 13px; }
+.search-results small, .notification-popover small { color: #8aa396; font-size: 11px; }
+.search-results-empty { padding: 12px; color: #8aa396; font-size: 12px; }
+.notification-popover h3 { margin: 6px 10px 8px; color: #344f40; font-size: 13px; }
+.notification-popover ul { display: grid; gap: 2px; margin: 0; padding: 0; }
+.notification-empty { margin: 0 10px 10px; color: #8aa396; font-size: 12px; }
+.popover-backdrop { position: fixed; inset: 0; z-index: 19; border: 0; background: transparent; cursor: default; }
+.finance-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; }
+.finance-due-input { display: inline-flex; align-items: center; gap: 6px; color: #647389; font-size: 11px; }
+.finance-due-input input { border: 1px solid #e0e6ec; border-radius: 6px; padding: 4px 6px; font: inherit; }
+
+@media (max-width: 760px) {
+  .agenda-week-grid { grid-template-columns: 44px repeat(7, minmax(108px, 1fr)); }
+  .agenda-week-view-single .agenda-week-grid { grid-template-columns: 44px minmax(0, 1fr); }
+  .agenda-week-view { scroll-padding-left: 44px; }
+  .search-box { cursor: pointer; }
+  .search-box-wrap-expanded { position: fixed; top: 10px; left: 12px; right: 12px; z-index: 25; }
+  .search-box-wrap-expanded .search-box { width: 100%; box-sizing: border-box; border: 1px solid #c8d2df; border-radius: 10px; padding: 11px 12px; background: #fff; box-shadow: 0 8px 24px rgba(12, 25, 45, .15); }
+  .search-box-wrap-expanded .search-box input { display: block; font-size: 16px; }
+  .search-box-wrap-expanded .search-results { left: 0; right: 0; width: auto; }
+  .notification-popover { position: fixed; top: 64px; left: 12px; right: 12px; width: auto; }
+  .finance-actions { width: 100%; margin-left: 44px; justify-content: flex-start; }
+}
+
+/* Cores por funcionário */
+.agenda-appointment-card.agenda-tone-mint { border-color: #bfe3cd; border-left: 4px solid #4fac78; background: #f0faf4; }
+.agenda-appointment-card.agenda-tone-blue { border-color: #c5daee; border-left: 4px solid #6e9cc7; background: #f0f6fc; }
+.agenda-appointment-card.agenda-tone-violet { border-color: #d6cbea; border-left: 4px solid #9279c4; background: #f5f2fb; }
+.agenda-appointment-card.agenda-tone-amber { border-color: #efd9b4; border-left: 4px solid #d59c4c; background: #fdf7ec; }
+.agenda-appointment-card.agenda-tone-rose { border-color: #ecc9d1; border-left: 4px solid #c77d8c; background: #fcf3f5; }
+.agenda-month-item.agenda-tone-mint { color: #2d6b49; background: #e6f6ec; }
+.agenda-month-item.agenda-tone-blue { color: #3d6288; background: #e8f1fa; }
+.agenda-month-item.agenda-tone-violet { color: #5d4a90; background: #efeafa; }
+.agenda-month-item.agenda-tone-amber { color: #8a5f1e; background: #fbf0dc; }
+.agenda-month-item.agenda-tone-rose { color: #8e4756; background: #fae9ed; }
+
+/* Barra de ajustes da grade (zoom e faixa de horas) */
+.agenda-week-wrap { display: grid; gap: 8px; }
+.agenda-week-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.agenda-tool-button { width: 34px; height: 34px; border: 1px solid #d5e4da; border-radius: 8px; color: #2d7653; background: #fff; font-size: 18px; font-weight: 700; line-height: 1; cursor: pointer; }
+.agenda-tool-button:disabled { opacity: .4; cursor: default; }
+.agenda-tool-label { min-width: 84px; color: #6c8576; font-size: 12px; font-weight: 700; text-align: center; }
+.agenda-tool-toggle { margin-left: auto; border: 1px solid #d5e4da; border-radius: 999px; padding: 7px 12px; color: #4b6a58; background: #fff; font-size: 12px; font-weight: 700; cursor: pointer; }
+.agenda-tool-toggle-on { border-color: #9fceb0; background: #f2faf5; }
+.agenda-period-hint { margin: -4px 0 4px; color: #4b7a60; font-size: 12px; line-height: 1.4; }
+.agenda-apply-all { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: #4b5d6f; font-size: 13px; }
+.agenda-apply-all input { width: 18px; height: 18px; }
+
+/* Semana inteira no celular: 7 colunas na largura da tela */
+.agenda-week-view[data-zoom="0"] .agenda-week-axis-head { padding: 0; }
+.agenda-week-view[data-zoom="0"] .agenda-week-hour { padding: 4px 2px; font-size: 10px; }
+.agenda-week-view[data-zoom="0"] .agenda-week-day { padding: 8px 2px 6px; min-height: 48px; }
+.agenda-week-view[data-zoom="0"] .agenda-week-day span { font-size: 9px; }
+.agenda-week-view[data-zoom="0"] .agenda-week-day strong { font-size: 15px; }
+.agenda-week-view[data-zoom="0"] .agenda-week-day small { display: none; }
+.agenda-week-view[data-zoom="0"] .agenda-week-column-body .agenda-appointment-card { left: 1px; right: 1px; width: calc(100% - 2px); }
+.agenda-week-view[data-zoom="0"] .agenda-week-column-body .agenda-appointment-card-compact { padding: 3px 3px 14px; border-left-width: 3px; }
+.agenda-week-view[data-zoom="0"] .agenda-card-time, .agenda-week-view[data-zoom="0"] .agenda-card-copy > span, .agenda-week-view[data-zoom="0"] .agenda-card-copy small, .agenda-week-view[data-zoom="0"] .agenda-appointment-card .status-pill { display: none; }
+.agenda-week-view[data-zoom="0"] .agenda-week-column-body .agenda-appointment-card-compact .agenda-card-copy strong { display: block; overflow: hidden; font-size: 9px; line-height: 1.15; white-space: normal; word-break: break-word; }
+.agenda-week-view[data-zoom="1"] .agenda-card-copy > span, .agenda-week-view[data-zoom="1"] .agenda-appointment-card .status-pill { display: none; }
+.agenda-week-view[data-zoom="1"] .agenda-week-column-body .agenda-appointment-card-compact .agenda-card-time { font-size: 9px; }
+.agenda-week-view[data-zoom="1"] .agenda-week-column-body .agenda-appointment-card-compact .agenda-card-copy strong { font-size: 10px; }
+.agenda-week-column-body .agenda-appointment-card { touch-action: pan-x pan-y pinch-zoom; }
+@media (max-width: 760px) {
+  .agenda-week-view { scroll-padding-left: 36px; }
+  .agenda-tool-toggle { font-size: 11px; padding: 6px 10px; }
+  .agenda-week-column-body .agenda-appointment-card-compact .agenda-card-time { font-size: 10px; }
+}
