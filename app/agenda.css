@@ -254,3 +254,48 @@
   .agenda-week-column-body .agenda-appointment-card { touch-action: pan-x pan-y; }
   .agenda-week-column-body .agenda-resize-handle { touch-action: none; }
 }
+
+/* Ditado por voz */
+.field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.voice-control { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.voice-button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #cfe3d6; border-radius: 999px; padding: 6px 12px; color: #2d7653; background: #f2faf5; font-size: 12px; font-weight: 700; cursor: pointer; }
+.voice-button:hover { border-color: #9fceb0; }
+.voice-button-on { border-color: #e9a8a0; color: #b42318; background: #fef3f2; animation: voice-pulse 1.4s ease-in-out infinite; }
+@keyframes voice-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(180, 35, 24, .25); } 50% { box-shadow: 0 0 0 6px rgba(180, 35, 24, 0); } }
+.voice-hint { color: #6c8576; font-size: 11px; font-weight: 500; }
+.voice-message { max-width: 260px; color: #b42318; font-size: 11px; font-weight: 500; text-align: right; }
+
+/* Visão Dia com a mesma grade arrastável da semana + semana no celular */
+.agenda-week-view { scroll-snap-type: x proximity; scroll-padding-left: 56px; }
+.agenda-week-column { scroll-snap-align: start; }
+.agenda-week-view-single .agenda-week-grid { grid-template-columns: 56px minmax(0, 1fr); min-width: 0; }
+
+/* Busca global, notificações e financeiro */
+.search-box-wrap, .notification-wrap { position: relative; }
+.search-results, .notification-popover { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; width: min(340px, 92vw); max-height: 380px; margin: 0; padding: 6px; overflow-y: auto; list-style: none; border: 1px solid #e6ede9; border-radius: 10px; background: #fff; box-shadow: 0 12px 30px rgba(12, 25, 45, .14); }
+.search-results button, .notification-popover button { display: grid; width: 100%; gap: 2px; border: 0; border-radius: 8px; padding: 9px 10px; background: transparent; text-align: left; cursor: pointer; }
+.search-results button:hover, .notification-popover li button:hover { background: #f2faf5; }
+.search-results li, .notification-popover li { list-style: none; }
+.search-results strong, .notification-popover strong { color: #35445a; font-size: 13px; }
+.search-results small, .notification-popover small { color: #8aa396; font-size: 11px; }
+.search-results-empty { padding: 12px; color: #8aa396; font-size: 12px; }
+.notification-popover h3 { margin: 6px 10px 8px; color: #344f40; font-size: 13px; }
+.notification-popover ul { display: grid; gap: 2px; margin: 0; padding: 0; }
+.notification-empty { margin: 0 10px 10px; color: #8aa396; font-size: 12px; }
+.popover-backdrop { position: fixed; inset: 0; z-index: 19; border: 0; background: transparent; cursor: default; }
+.finance-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; }
+.finance-due-input { display: inline-flex; align-items: center; gap: 6px; color: #647389; font-size: 11px; }
+.finance-due-input input { border: 1px solid #e0e6ec; border-radius: 6px; padding: 4px 6px; font: inherit; }
+
+@media (max-width: 760px) {
+  .agenda-week-grid { grid-template-columns: 44px repeat(7, minmax(108px, 1fr)); }
+  .agenda-week-view-single .agenda-week-grid { grid-template-columns: 44px minmax(0, 1fr); }
+  .agenda-week-view { scroll-padding-left: 44px; }
+  .search-box { cursor: pointer; }
+  .search-box-wrap-expanded { position: fixed; top: 10px; left: 12px; right: 12px; z-index: 25; }
+  .search-box-wrap-expanded .search-box { width: 100%; box-sizing: border-box; border: 1px solid #c8d2df; border-radius: 10px; padding: 11px 12px; background: #fff; box-shadow: 0 8px 24px rgba(12, 25, 45, .15); }
+  .search-box-wrap-expanded .search-box input { display: block; font-size: 16px; }
+  .search-box-wrap-expanded .search-results { left: 0; right: 0; width: auto; }
+  .notification-popover { position: fixed; top: 64px; left: 12px; right: 12px; width: auto; }
+  .finance-actions { width: 100%; margin-left: 44px; justify-content: flex-start; }
+}

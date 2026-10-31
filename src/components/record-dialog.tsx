@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Check, LoaderCircle, Search, X } from "lucide-react";
 import { useDemoData, type AppointmentCadence } from "@/src/components/demo-data";
 import { findConflicts, todayDate } from "@/src/lib/agenda";
+import { VoiceDictationButton } from "@/src/components/voice-input";
 import { formatCep, formatCentsInput, formatDocument, formatPhone, onlyDigits, parseCurrencyToCents } from "@/src/lib/brasil";
 import { getCurrentFirebaseUserToken, isFirebaseClientConfigured } from "@/src/lib/firebase-client";
 
@@ -199,4 +200,4 @@ function ContactFields({ kind, form, update, lookupCep, lookupCnpj, loading }: {
 function Field({ label, value, onChange, type = "text", placeholder, required }: { label: string; value: string; onChange: (value: string) => void; type?: string; placeholder?: string; required?: boolean }) { return <label className="field-wrap">{label}<input type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} required={required} /></label>; }
 function CurrencyField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { const cents = parseCurrencyToCents(value); return <label className="field-wrap">{label}<input inputMode="numeric" value={value ? formatCentsInput(cents) : ""} onChange={(event) => onChange(event.target.value)} placeholder="R$ 0,00" /></label>; }
 function Select({ label, value, onChange, options, required }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }>; required?: boolean }) { return <label className="field-wrap">{label}<select value={value} onChange={(event) => onChange(event.target.value)} required={required}><option value="">Selecione</option>{options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>; }
-function TextArea({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) { return <label className="field-wrap">{label}<textarea value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} rows={4} /></label>; }
+function TextArea({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) { return <label className="field-wrap"><span className="field-label-row"><span>{label}</span><VoiceDictationButton value={value} onChange={onChange} /></span><textarea value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} rows={4} /></label>; }

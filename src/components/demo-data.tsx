@@ -65,6 +65,9 @@ type DemoActions = {
   removeAppointment: (appointmentId: string) => void;
   addWorkOrder: (record: Omit<WorkOrderRecord, "id" | "status" | "updatedAt" | "diary" | "materialLines"> & { materialLines?: WorkOrderRecord["materialLines"] }) => string;
   addFinance: (record: Omit<FinanceRecord, "id" | "status">) => void;
+  markFinancePaid: (financeId: string, paid: boolean) => void;
+  setFinanceDueDate: (financeId: string, dueDate: string) => void;
+  setWorkOrderStatus: (workOrderId: string, status: "in_progress" | "waiting") => void;
   addStock: (record: Omit<StockRecord, "id">) => void;
   addDiary: (workOrderId: string, text: string) => void;
   reviseWorkOrderDescription: (workOrderId: string, text: string) => void;
@@ -138,6 +141,9 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
       return nextId;
     },
     addFinance: (record) => setState((previous) => ({ ...previous, finance: [{ ...record, id: id("fin"), status: "open" }, ...previous.finance] })),
+    markFinancePaid: (financeId, paid) => setState((previous) => ({ ...previous, finance: previous.finance.map((item) => item.id === financeId ? { ...item, status: (paid ? "paid" : "open") as FinanceRecord["status"], paidAt: paid ? new Date().toISOString() : undefined } : item) })),
+    setFinanceDueDate: (financeId, dueDate) => setState((previous) => ({ ...previous, finance: previous.finance.map((item) => item.id === financeId ? { ...item, dueDate } : item) })),
+    setWorkOrderStatus: (workOrderId, status) => setState((previous) => ({ ...previous, workOrders: previous.workOrders.map((order) => order.id === workOrderId && order.status !== "completed" ? { ...order, status, updatedAt: status === "waiting" ? "Pausada agora" : "Retomada agora" } : order) })),
     addStock: (record) => setState((previous) => ({ ...previous, stock: [{ ...record, id: id("st") }, ...previous.stock] })),
     addDiary: (workOrderId, text) => setState((previous) => ({ ...previous, workOrders: previous.workOrders.map((order) => order.id === workOrderId ? { ...order, updatedAt: "Diário atualizado agora", diary: [{ id: id("diary"), text, createdAt: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()) }, ...order.diary] } : order) })),
     reviseWorkOrderDescription: (workOrderId, text) => setState((previous) => ({ ...previous, workOrders: previous.workOrders.map((order) => { if (order.id !== workOrderId || !text.trim()) return order; const history = order.descriptionHistory?.length ? order.descriptionHistory : [{ id: id("desc"), text: order.description, createdAt: "Descrição inicial" }]; return { ...order, description: text.trim(), updatedAt: "Descrição revisada agora", descriptionHistory: [{ id: id("desc"), text: text.trim(), createdAt: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()) }, ...history] }; }) })),
