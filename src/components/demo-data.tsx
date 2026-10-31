@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { accessSummary } from "@/src/lib/roles";
 import { appointments, clients, financeItems, stockItems, suppliers, teamMembers, workOrders } from "@/src/domain/mock-data";
 
 export type ClientRecord = {
@@ -42,8 +43,9 @@ export type DescriptionRevision = { id: string; text: string; createdAt: string 
 export type WorkOrderRecord = (typeof workOrders)[number] & { clientId: string; description: string; descriptionHistory?: DescriptionRevision[]; diary: Array<{ id: string; text: string; createdAt: string }>; materialLines: Array<{ stockId: string; quantity: number }> };
 export type FinanceRecord = (typeof financeItems)[number] & { originId?: string; category: string; paidAt?: string };
 export type StockRecord = (typeof stockItems)[number] & { costCents: number };
-export type TeamRecord = (typeof teamMembers)[number] & { email: string };
-export type InvitationRecord = { id: string; email: string; role: string; kind: "owner" | "team"; status: "pending" | "accepted" | "expired"; createdAt: string; expiresAt: string };
+export type TeamRecord = (typeof teamMembers)[number] & { email: string; active?: boolean };
+export type StockMovement = { id: string; stockId: string; delta: number; reason: string; createdAt: string };
+export type InvitationRecord = { id: string; email: string; role: string; kind: "owner" | "team"; status: "pending" | "accepted" | "expired" | "revoked"; createdAt: string; expiresAt: string };
 
 type DemoState = {
   clients: ClientRecord[];
@@ -54,6 +56,7 @@ type DemoState = {
   stock: StockRecord[];
   team: TeamRecord[];
   invitations: InvitationRecord[];
+  stockMovements: StockMovement[];
 };
 
 type DemoActions = {
@@ -74,6 +77,24 @@ type DemoActions = {
   closeWorkOrder: (workOrderId: string) => void;
   invite: (email: string, role: string, kind: "owner" | "team") => void;
   addTeamMember: (record: Omit<TeamRecord, "id" | "initials" | "tone">) => void;
+  updateClient: (clientId: string, patch: Partial<Omit<ClientRecord, "id" | "initials" | "tone" | "history" | "detail">>) => void;
+  removeClient: (clientId: string) => void;
+  updateSupplier: (supplierId: string, patch: Partial<Omit<SupplierRecord, "id" | "initials" | "tone">>) => void;
+  removeSupplier: (supplierId: string) => void;
+  updateWorkOrder: (workOrderId: string, patch: Partial<Pick<WorkOrderRecord, "service" | "amountCents" | "professional">>) => void;
+  removeWorkOrder: (workOrderId: string) => void;
+  addOrderMaterial: (workOrderId: string, stockId: string, quantity: number) => void;
+  removeOrderMaterial: (workOrderId: string, stockId: string) => void;
+  updateFinance: (financeId: string, patch: Partial<Pick<FinanceRecord, "title" | "party" | "amountCents" | "dueDate" | "category" | "type">>) => void;
+  removeFinance: (financeId: string) => void;
+  updateStock: (stockId: string, patch: Partial<Omit<StockRecord, "id">>) => void;
+  removeStock: (stockId: string) => void;
+  adjustStock: (stockId: string, delta: number, reason: string, purchase?: { costCents?: number; party?: string; dueDate?: string }) => void;
+  updateTeamMember: (memberId: string, patch: Partial<Pick<TeamRecord, "name" | "email" | "role" | "access" | "active">>) => void;
+  removeTeamMember: (memberId: string) => void;
+  resendInvite: (inviteId: string) => void;
+  revokeInvite: (inviteId: string) => void;
+  acceptInvite: (inviteId: string) => void;
 };
 
 const storageKey = "orquestra-one-demo-v5";
@@ -92,6 +113,7 @@ function buildInitialState(): DemoState {
     })),
     stock: stockItems.map((item, index) => ({ ...item, costCents: [1290, 890, 35990, 2790][index] ?? 0 })),
     team: teamMembers.map((member) => ({ ...member, email: `${member.name.toLowerCase().replace(/\s+/g, ".")}@empresaexemplo.com` })),
+    stockMovements: [],
     invitations: [
       { id: "invite-1", email: "rafael.lima@empresaexemplo.com", role: "Profissional", kind: "team", status: "pending", createdAt: "Hoje, 09:10", expiresAt: "05 nov 2026" },
     ],
@@ -115,7 +137,7 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(storageKey);
-      if (saved) setState(JSON.parse(saved) as DemoState);
+      if (saved) setState((current) => ({ ...current, ...(JSON.parse(saved) as Partial<DemoState>) }));
     } catch {
       window.localStorage.removeItem(storageKey);
     } finally {
@@ -166,6 +188,81 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
     }),
     invite: (email, role, kind) => setState((previous) => ({ ...previous, invitations: [{ id: id("invite"), email, role, kind, status: "pending", createdAt: "Agora", expiresAt: "Em 7 dias" }, ...previous.invitations] })),
     addTeamMember: (record) => setState((previous) => ({ ...previous, team: [{ ...record, id: id("tm"), initials: initials(record.name), tone: tones[previous.team.length % tones.length] }, ...previous.team] })),
+
+    updateClient: (clientId, patch) => setState((previous) => {
+      const nameChanged = typeof patch.name === "string" && patch.name.trim();
+      return {
+        ...previous,
+        clients: previous.clients.map((client) => client.id === clientId ? { ...client, ...patch, ...(nameChanged ? { initials: initials(patch.name as string) } : {}) } : client),
+        workOrders: nameChanged ? previous.workOrders.map((order) => order.clientId === clientId ? { ...order, client: patch.name as string } : order) : previous.workOrders,
+        appointments: nameChanged ? previous.appointments.map((appointment) => appointment.clientId === clientId ? { ...appointment, client: patch.name as string } : appointment) : previous.appointments,
+      };
+    }),
+    removeClient: (clientId) => setState((previous) => ({ ...previous, clients: previous.clients.filter((client) => client.id !== clientId) })),
+    updateSupplier: (supplierId, patch) => setState((previous) => ({ ...previous, suppliers: previous.suppliers.map((supplier) => supplier.id === supplierId ? { ...supplier, ...patch, ...(patch.name?.trim() ? { initials: initials(patch.name) } : {}) } : supplier) })),
+    removeSupplier: (supplierId) => setState((previous) => ({ ...previous, suppliers: previous.suppliers.filter((supplier) => supplier.id !== supplierId) })),
+    updateWorkOrder: (workOrderId, patch) => setState((previous) => ({
+      ...previous,
+      workOrders: previous.workOrders.map((order) => order.id === workOrderId ? { ...order, ...patch, updatedAt: "Editada agora" } : order),
+      finance: typeof patch.amountCents === "number" ? previous.finance.map((item) => item.originId === workOrderId && item.status !== "paid" ? { ...item, amountCents: patch.amountCents as number } : item) : previous.finance,
+    })),
+    removeWorkOrder: (workOrderId) => setState((previous) => ({
+      ...previous,
+      workOrders: previous.workOrders.filter((order) => order.id !== workOrderId || order.status === "completed"),
+      appointments: previous.appointments.map((appointment) => appointment.workOrderId === workOrderId ? { ...appointment, workOrderId: "" } : appointment),
+    })),
+    addOrderMaterial: (workOrderId, stockId, quantity) => setState((previous) => ({
+      ...previous,
+      workOrders: previous.workOrders.map((order) => {
+        if (order.id !== workOrderId || order.status === "completed" || quantity <= 0) return order;
+        const existing = order.materialLines.find((line) => line.stockId === stockId);
+        const materialLines = existing ? order.materialLines.map((line) => line.stockId === stockId ? { ...line, quantity: line.quantity + quantity } : line) : [...order.materialLines, { stockId, quantity }];
+        return { ...order, materialLines, updatedAt: "Materiais atualizados agora" };
+      }),
+    })),
+    removeOrderMaterial: (workOrderId, stockId) => setState((previous) => ({
+      ...previous,
+      workOrders: previous.workOrders.map((order) => order.id === workOrderId && order.status !== "completed" ? { ...order, materialLines: order.materialLines.filter((line) => line.stockId !== stockId), updatedAt: "Materiais atualizados agora" } : order),
+    })),
+    updateFinance: (financeId, patch) => setState((previous) => ({ ...previous, finance: previous.finance.map((item) => item.id === financeId ? { ...item, ...patch } : item) })),
+    removeFinance: (financeId) => setState((previous) => ({ ...previous, finance: previous.finance.filter((item) => item.id !== financeId) })),
+    updateStock: (stockId, patch) => setState((previous) => ({ ...previous, stock: previous.stock.map((item) => item.id === stockId ? { ...item, ...patch } : item) })),
+    removeStock: (stockId) => setState((previous) => ({
+      ...previous,
+      stock: previous.stock.filter((item) => item.id !== stockId),
+      stockMovements: (previous.stockMovements ?? []).filter((movement) => movement.stockId !== stockId),
+      workOrders: previous.workOrders.map((order) => order.status === "completed" ? order : { ...order, materialLines: order.materialLines.filter((line) => line.stockId !== stockId) }),
+    })),
+    adjustStock: (stockId, delta, reason, purchase) => setState((previous) => {
+      const item = previous.stock.find((entry) => entry.id === stockId);
+      if (!item || !Number.isFinite(delta) || delta === 0) return previous;
+      const quantity = Math.max(0, Math.round((item.quantity + delta) * 1000) / 1000);
+      const applied = quantity - item.quantity;
+      const costCents = delta > 0 && purchase?.costCents ? purchase.costCents : item.costCents;
+      const createdAt = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date());
+      const payable = delta > 0 && purchase?.party !== undefined && purchase.costCents ? [{ id: id("fin"), title: `Compra: ${item.name}`, party: purchase.party || "Fornecedor", dueDate: purchase.dueDate || "A definir", amountCents: Math.round(purchase.costCents * delta), type: "payable" as const, status: "open" as const, category: "Materiais" }] : [];
+      return {
+        ...previous,
+        stock: previous.stock.map((entry) => entry.id === stockId ? { ...entry, quantity, costCents } : entry),
+        stockMovements: [{ id: id("mv"), stockId, delta: applied, reason: reason.trim() || (delta > 0 ? "Entrada" : "Saída"), createdAt }, ...(previous.stockMovements ?? [])].slice(0, 500),
+        finance: [...payable, ...previous.finance],
+      };
+    }),
+    updateTeamMember: (memberId, patch) => setState((previous) => ({ ...previous, team: previous.team.map((member) => member.id === memberId ? { ...member, ...patch, ...(patch.name?.trim() ? { initials: initials(patch.name) } : {}) } : member) })),
+    removeTeamMember: (memberId) => setState((previous) => ({ ...previous, team: previous.team.filter((member) => member.id !== memberId || member.role === "Proprietário") })),
+    resendInvite: (inviteId) => setState((previous) => ({ ...previous, invitations: previous.invitations.map((invite) => invite.id === inviteId ? { ...invite, status: "pending", createdAt: "Reenviado agora", expiresAt: "Em 7 dias" } : invite) })),
+    revokeInvite: (inviteId) => setState((previous) => ({ ...previous, invitations: previous.invitations.map((invite) => invite.id === inviteId ? { ...invite, status: "revoked" } : invite) })),
+    acceptInvite: (inviteId) => setState((previous) => {
+      const invite = previous.invitations.find((item) => item.id === inviteId);
+      if (!invite || invite.status !== "pending") return previous;
+      const name = invite.email.split("@")[0].split(/[._-]+/).filter(Boolean).map((part) => part[0].toUpperCase() + part.slice(1)).join(" ") || invite.email;
+      const already = previous.team.some((member) => member.email.toLowerCase() === invite.email.toLowerCase());
+      return {
+        ...previous,
+        invitations: previous.invitations.map((item) => item.id === inviteId ? { ...item, status: "accepted" } : item),
+        team: already ? previous.team : [{ id: id("tm"), name, email: invite.email, role: invite.role, access: accessSummary(invite.role), active: true, initials: initials(name), tone: tones[previous.team.length % tones.length] }, ...previous.team],
+      };
+    }),
   }), [state]);
 
   return <DemoDataContext.Provider value={value}>{children}</DemoDataContext.Provider>;

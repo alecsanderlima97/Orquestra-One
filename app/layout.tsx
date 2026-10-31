@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AppProviders } from "@/src/components/app-providers";
 import "./globals.css";
 import "./agenda.css";
+import "./business.css";
 
 export const metadata: Metadata = {
   title: "Orquestra One | Gestão para quem faz acontecer",
