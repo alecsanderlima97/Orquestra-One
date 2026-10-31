@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import {
   Activity, ArrowDownRight, ArrowUpDown, ArrowUpRight, Bell, Boxes, Building2, CalendarClock, CalendarDays,
   CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, ClipboardList, Clock3, FileBarChart,
@@ -11,6 +11,7 @@ import { formatBRL } from "@/src/domain/money";
 import type { SectionId } from "@/src/domain/types";
 import { useDemoData, type AppointmentPatch, type AppointmentRecord, type ClientRecord, type FinanceRecord, type WorkOrderRecord } from "@/src/components/demo-data";
 import { RecordDialog, type RecordKind } from "@/src/components/record-dialog";
+import { findConflicts, lengthMinutes, startMinutes, todayDate } from "@/src/lib/agenda";
 
 const navigation: Array<{ id: Exclude<SectionId, "settings">; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Visão geral", icon: LayoutDashboard }, { id: "agenda", label: "Agenda", icon: CalendarDays },
@@ -36,7 +37,6 @@ const sectionCopy: Record<SectionId, { eyebrow: string; title: string; descripti
 type Status = "in_progress" | "waiting" | "completed" | "confirmed" | "pending" | "paid" | "open" | "overdue";
 type AgendaMode = "day" | "week" | "month";
 
-const DEMO_TODAY = "2026-10-29";
 const AGENDA_HOURS = [...Array.from({ length: 17 }, (_, index) => `${String(index + 7).padStart(2, "0")}:00`), "00:00"];
 const AGENDA_START_MINUTES = 7 * 60;
 const AGENDA_END_MINUTES = 25 * 60;
@@ -105,15 +105,11 @@ function appointmentHour(appointment: AppointmentRecord) {
 }
 
 function appointmentMinutes(appointment: AppointmentRecord) {
-  const [hours, minutes] = appointment.time.split(":").map(Number);
-  return (hours === 0 ? 24 : hours) * 60 + minutes;
+  return startMinutes(appointment);
 }
 
 function appointmentDurationMinutes(appointment: AppointmentRecord) {
-  if (appointment.duration.toLowerCase().includes("dia")) return 8 * 60;
-  const duration = appointment.duration.match(/(\d+)h(?:\s*(\d+))?/i);
-  const minutesOnly = appointment.duration.match(/(\d+)\s*min/i);
-  return Math.max(AGENDA_SNAP_MINUTES, (Number(duration?.[1] ?? 0) * 60) + Number(duration?.[2] ?? minutesOnly?.[1] ?? 0));
+  return lengthMinutes(appointment);
 }
 
 function snapAgendaMinutes(value: number) {
@@ -178,7 +174,9 @@ export function OperationalDashboard() {
   const [dialog, setDialog] = useState<RecordKind | null>(null);
   const [workOrderId, setWorkOrderId] = useState<string>();
   const copy = sectionCopy[activeSection];
-  const todayAppointments = data.appointments.filter((appointment) => appointment.date === "2026-10-29").length;
+  const [today, setToday] = useState("");
+  useEffect(() => { setToday(todayDate()); }, []);
+  const todayAppointments = today ? data.appointments.filter((appointment) => appointment.date === today).length : 0;
 
   function navigate(section: SectionId) { setActiveSection(section); setQuickOpen(false); setMobileMenuOpen(false); }
   function open(kind: RecordKind, orderId?: string) { setWorkOrderId(orderId); setDialog(kind); setQuickOpen(false); }
@@ -221,7 +219,7 @@ function Metric({ icon: Icon, label, value, detail, tone }: { icon: LucideIcon; 
 function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => void }) {
   const data = useDemoData();
   const [mode, setMode] = useState<AgendaMode>("week");
-  const [selectedDate, setSelectedDate] = useState(DEMO_TODAY);
+  const [selectedDate, setSelectedDate] = useState(todayDate);
   const [query, setQuery] = useState("");
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>();
   const weekStart = startOfAgendaWeek(selectedDate);
@@ -238,6 +236,8 @@ function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => voi
   const professionals = useMemo(() => Array.from(new Set(list.map((item) => item.professional))), [list]);
   const selectedAppointment = data.appointments.find((item) => item.id === selectedAppointmentId) ?? list[0] ?? null;
   const selectedClient = selectedAppointment ? data.clients.find((client) => client.id === selectedAppointment.clientId) : undefined;
+  const selectedConflicts = selectedAppointment ? findConflicts(selectedAppointment, data.appointments) : [];
+  const conflictCount = list.filter((item) => findConflicts(item, data.appointments).length > 0).length;
   const periodLabel = mode === "day"
     ? agendaLongDateLabel(selectedDate)
     : mode === "week"
@@ -269,7 +269,7 @@ function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => voi
     <div className="agenda-controls">
       <div className="agenda-period-navigation">
         <button className="icon-button agenda-nav-button" type="button" onClick={() => shiftPeriod(-1)} aria-label={mode === "day" ? "Dia anterior" : mode === "week" ? "Semana anterior" : "Mês anterior"}><ChevronLeft size={17} /></button>
-        <button className="agenda-today-button" type="button" onClick={() => chooseDate(DEMO_TODAY)}>Hoje</button>
+        <button className="agenda-today-button" type="button" onClick={() => chooseDate(todayDate())}>Hoje</button>
         <button className="icon-button agenda-nav-button" type="button" onClick={() => shiftPeriod(1)} aria-label={mode === "day" ? "Próximo dia" : mode === "week" ? "Próxima semana" : "Próximo mês"}><ChevronRight size={17} /></button>
         <strong>{periodLabel}</strong>
       </div>
@@ -280,6 +280,7 @@ function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => voi
     <div className="agenda-toolbar-bottom">
       <span><CalendarDays size={15} /> {mode === "day" ? "Visualização diária" : mode === "week" ? "Agenda até 00:00 · arraste para mover e use a seta ↕ para ajustar" : "Visão ampla do mês"}</span>
       <div className="agenda-professional-legend" aria-label="Legenda de responsáveis">{professionals.map((professional) => <span key={professional}><i className={`agenda-professional-dot agenda-professional-${professionalColor(professional)}`} />{professional}</span>)}</div>
+      {conflictCount > 0 && <span className="agenda-conflict-badge" role="status">{conflictCount} compromisso(s) com horário em conflito</span>}
       <label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar cliente, serviço ou endereço" aria-label="Filtrar agenda" /></label>
     </div>
     <div className="agenda-calendar-layout">
@@ -289,7 +290,7 @@ function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => voi
         {mode === "month" && <AgendaMonthView date={selectedDate} appointments={list} selectedDate={selectedDate} onSelectDate={chooseDate} />}
         {!list.length && <div className="agenda-filter-empty"><EmptyState message="Nenhum compromisso corresponde ao filtro neste período." /></div>}
       </div>
-      <AgendaDetails appointment={selectedAppointment} client={selectedClient} onOpen={onOpen} />
+      <AgendaDetails appointment={selectedAppointment} client={selectedClient} conflicts={selectedConflicts} onOpen={onOpen} onUpdate={updateAppointment} onRemove={(appointmentId) => { data.removeAppointment(appointmentId); setSelectedAppointmentId(undefined); }} />
     </div>
   </section>;
 }
@@ -400,9 +401,79 @@ function AgendaMonthView({ date, appointments, selectedDate, onSelectDate }: { d
   return <div className="agenda-month-view"><div className="agenda-weekday-row">{["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((day) => <span key={day}>{day}</span>)}</div><div className="agenda-month-grid">{monthDays.map((day) => { const dayAppointments = appointments.filter((appointment) => appointment.date === day).sort((a, b) => a.time.localeCompare(b.time)); const inMonth = day.slice(0, 7) === monthKey; return <button className={`agenda-month-cell ${inMonth ? "" : "agenda-month-cell-muted"} ${day === selectedDate ? "agenda-month-cell-active" : ""}`} key={day} type="button" onClick={() => onSelectDate(day)}><span className="agenda-month-number">{parseAgendaDate(day).getDate()}</span><span className="agenda-month-items">{dayAppointments.slice(0, 3).map((appointment) => <span className="agenda-month-item" key={appointment.id}><i className={`agenda-professional-dot agenda-professional-${professionalColor(appointment.professional)}`} /><b>{appointment.time}</b> {appointment.client}</span>)}{dayAppointments.length > 3 && <small>+{dayAppointments.length - 3} mais</small>}</span></button>; })}</div></div>;
 }
 
-function AgendaDetails({ appointment, client, onOpen }: { appointment: AppointmentRecord | null; client?: ClientRecord; onOpen: (kind: RecordKind, id?: string) => void }) {
+const AGENDA_STATUS_OPTIONS: Array<{ value: AppointmentRecord["status"]; label: string }> = [
+  { value: "pending", label: "Pendente" },
+  { value: "confirmed", label: "Confirmado" },
+  { value: "in_progress", label: "Em andamento" },
+];
+
+function isValidAgendaTime(value: string) {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function isValidAgendaDuration(value: string) {
+  return /dia/i.test(value) || /\d+\s*h/i.test(value) || /\d+\s*min/i.test(value);
+}
+
+type AgendaDetailsProps = {
+  appointment: AppointmentRecord | null;
+  client?: ClientRecord;
+  conflicts: AppointmentRecord[];
+  onOpen: (kind: RecordKind, id?: string) => void;
+  onUpdate: (appointmentId: string, patch: AppointmentPatch) => void;
+  onRemove: (appointmentId: string) => void;
+};
+
+function AgendaDetails(props: AgendaDetailsProps) {
+  const { appointment } = props;
   if (!appointment) return <aside className="agenda-details agenda-details-empty"><CalendarDays size={22} /><p>Selecione um compromisso para ver os detalhes.</p><span>A agenda reúne cliente, horário, endereço, observações e vínculo com a ordem de serviço.</span></aside>;
-  return <aside className="agenda-details"><div className="agenda-details-head"><div><p className="eyebrow">Compromisso selecionado</p><h3>{appointment.client}</h3><span>{appointment.service}</span></div><StatusPill status={appointment.status} /></div><div className="agenda-detail-list"><div><CalendarDays size={15} /><span><small>Data</small><strong>{agendaLongDateLabel(appointment.date)}</strong></span></div>{appointment.endDate && appointment.endDate !== appointment.date && <div><CalendarDays size={15} /><span><small>Período reservado</small><strong>Até {agendaLongDateLabel(appointment.endDate)} · {appointmentCadenceLabel(appointment.cadence)}</strong></span></div>}<div><Clock3 size={15} /><span><small>Horário e duração</small><strong>{appointment.time} · {appointment.duration}</strong></span></div><div><MapPin size={15} /><span><small>Local</small><strong>{appointment.address}</strong></span></div>{client?.phone && <div><MessageCircle size={15} /><span><small>Contato rápido</small><WhatsAppLink phone={client.phone} label="Enviar lembrete pelo WhatsApp" message={`Olá, ${client.name}! Confirmando o serviço de ${appointment.service} em ${agendaLongDateLabel(appointment.date)} às ${appointment.time}.`} /></span></div>}</div>{appointment.notes && <div className="agenda-notes"><small>Observações</small><p>{appointment.notes}</p></div>}<div className="agenda-detail-actions"><button className="secondary-button" type="button" onClick={() => onOpen("appointment")}>Editar agenda</button>{appointment.workOrderId && <button className="primary-button" type="button" onClick={() => onOpen("diary", appointment.workOrderId)}>Abrir diário da OS</button>}</div></aside>;
+  return <AgendaDetailsBody key={appointment.id} {...props} appointment={appointment} />;
+}
+
+function AgendaDetailsBody({ appointment, client, conflicts, onOpen, onUpdate, onRemove }: Omit<AgendaDetailsProps, "appointment"> & { appointment: AppointmentRecord }) {
+  const data = useDemoData();
+  const [editing, setEditing] = useState(false);
+  const [error, setError] = useState("");
+  const [draft, setDraft] = useState({ date: appointment.date, time: appointment.time, duration: appointment.duration, professional: appointment.professional, notes: appointment.notes });
+
+  function save() {
+    const professional = draft.professional.trim();
+    if (!draft.date) return setError("Informe a data.");
+    if (!isValidAgendaTime(draft.time)) return setError("Use um horário válido, como 08:30.");
+    if (!isValidAgendaDuration(draft.duration)) return setError("Use uma duração como 1h, 1h 30, 45 min ou Dia inteiro.");
+    if (!professional) return setError("Informe o responsável.");
+    const clashes = findConflicts({ id: appointment.id, date: draft.date, time: draft.time, duration: draft.duration, professional }, data.appointments);
+    if (clashes.length && !window.confirm(`${professional} já tem compromisso nesse horário (${clashes[0].client}, ${clashes[0].time}). Salvar mesmo assim?`)) return;
+    const single = !appointment.cadence || appointment.cadence === "single";
+    onUpdate(appointment.id, { date: draft.date, time: draft.time, duration: draft.duration.trim(), professional, notes: draft.notes, ...(single ? { endDate: draft.date } : {}) });
+    setError("");
+    setEditing(false);
+  }
+
+  function remove() {
+    if (window.confirm(`Remover o agendamento de ${appointment.client} (${agendaLongDateLabel(appointment.date)}, ${appointment.time})? Esta ação não pode ser desfeita.`)) onRemove(appointment.id);
+  }
+
+  return <aside className="agenda-details">
+    <div className="agenda-details-head"><div><p className="eyebrow">Compromisso selecionado</p><h3>{appointment.client}</h3><span>{appointment.service}</span></div><StatusPill status={appointment.status} /></div>
+    {conflicts.length > 0 && <div className="agenda-conflict-note" role="alert"><strong>Conflito de horário</strong><p>{conflicts.map((item) => `${item.client} (${item.time}, ${item.duration})`).join("; ")} — mesmo responsável, no mesmo horário.</p></div>}
+    <div className="agenda-status-row" role="group" aria-label="Situação do compromisso">{AGENDA_STATUS_OPTIONS.map((option) => <button key={option.value} type="button" className={`filter-pill ${appointment.status === option.value ? "filter-pill-active" : ""}`} aria-pressed={appointment.status === option.value} onClick={() => onUpdate(appointment.id, { status: option.value })}>{option.label}</button>)}</div>
+    {editing ? <div className="agenda-edit-form">
+      <div className="agenda-edit-grid">
+        <label className="field-wrap">Data<input type="date" value={draft.date} onChange={(event) => setDraft((previous) => ({ ...previous, date: event.target.value }))} /></label>
+        <label className="field-wrap">Horário<input type="time" value={draft.time} onChange={(event) => setDraft((previous) => ({ ...previous, time: event.target.value }))} /></label>
+        <label className="field-wrap">Duração<input value={draft.duration} placeholder="1h 30" onChange={(event) => setDraft((previous) => ({ ...previous, duration: event.target.value }))} /></label>
+        <label className="field-wrap">Responsável<input value={draft.professional} onChange={(event) => setDraft((previous) => ({ ...previous, professional: event.target.value }))} /></label>
+      </div>
+      <label className="field-wrap">Observações<textarea rows={3} value={draft.notes} onChange={(event) => setDraft((previous) => ({ ...previous, notes: event.target.value }))} /></label>
+      {error && <p className="agenda-edit-error" role="alert">{error}</p>}
+      <div className="agenda-detail-actions"><button className="secondary-button" type="button" onClick={() => { setEditing(false); setError(""); }}>Cancelar</button><button className="primary-button" type="button" onClick={save}>Salvar alterações</button></div>
+    </div> : <>
+      <div className="agenda-detail-list"><div><CalendarDays size={15} /><span><small>Data</small><strong>{agendaLongDateLabel(appointment.date)}</strong></span></div>{appointment.endDate && appointment.endDate !== appointment.date && <div><CalendarDays size={15} /><span><small>Período reservado</small><strong>Até {agendaLongDateLabel(appointment.endDate)} · {appointmentCadenceLabel(appointment.cadence)}</strong></span></div>}<div><Clock3 size={15} /><span><small>Horário e duração</small><strong>{appointment.time} · {appointment.duration}</strong></span></div><div><Users size={15} /><span><small>Responsável</small><strong>{appointment.professional}</strong></span></div><div><MapPin size={15} /><span><small>Local</small><strong>{appointment.address}</strong></span></div>{client?.phone && <div><MessageCircle size={15} /><span><small>Contato rápido</small><WhatsAppLink phone={client.phone} label="Enviar lembrete pelo WhatsApp" message={`Olá, ${client.name}! Confirmando o serviço de ${appointment.service} em ${agendaLongDateLabel(appointment.date)} às ${appointment.time}.`} /></span></div>}</div>
+      {appointment.notes && <div className="agenda-notes"><small>Observações</small><p>{appointment.notes}</p></div>}
+      <div className="agenda-detail-actions"><button className="secondary-button" type="button" onClick={() => setEditing(true)}>Editar compromisso</button>{appointment.workOrderId && <button className="primary-button" type="button" onClick={() => onOpen("diary", appointment.workOrderId)}>Abrir diário da OS</button>}<button className="table-action" type="button" onClick={remove}>Remover</button></div>
+    </>}
+  </aside>;
 }
 
 function OrdersView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => void }) { const data = useDemoData(); const [filter, setFilter] = useState<"all" | WorkOrderRecord["status"]>("all"); const [query, setQuery] = useState(""); const [descriptionOrderId, setDescriptionOrderId] = useState<string>(); const list = data.workOrders.filter((item) => (filter === "all" || item.status === filter) && `${item.id} ${item.client} ${item.service}`.toLowerCase().includes(query.toLowerCase())); const descriptionOrder = data.workOrders.find((order) => order.id === descriptionOrderId); return <section className="panel full-panel"><PanelHeader eyebrow={`${data.workOrders.length} ordens registradas`} title="Acompanhe os serviços" action="Nova ordem" onAction={() => onOpen("order")} /><div className="view-toolbar"><div className="filter-pills"><button className={`filter-pill ${filter === "all" ? "filter-pill-active" : ""}`} type="button" onClick={() => setFilter("all")}>Todas <span>{data.workOrders.length}</span></button><button className={`filter-pill ${filter === "in_progress" ? "filter-pill-active" : ""}`} type="button" onClick={() => setFilter("in_progress")}>Em andamento <span>{data.workOrders.filter((item) => item.status === "in_progress").length}</span></button><button className={`filter-pill ${filter === "waiting" ? "filter-pill-active" : ""}`} type="button" onClick={() => setFilter("waiting")}>Aguardando <span>{data.workOrders.filter((item) => item.status === "waiting").length}</span></button></div><label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar OS ou cliente" /></label></div><div className="orders-table"><div className="table-head"><span>Ordem</span><span>Serviço / cliente</span><span>Valor</span><span>Status</span><span>Ações</span></div>{list.map((order) => <OrderRow key={order.id} order={order} onDiary={() => onOpen("diary", order.id)} onDescription={() => setDescriptionOrderId(order.id)} onClose={() => data.closeWorkOrder(order.id)} />)}{!list.length && <EmptyState message="Nenhuma ordem corresponde aos filtros." />}</div>{descriptionOrder && <DescriptionHistory order={descriptionOrder} onSave={(text) => data.reviseWorkOrderDescription(descriptionOrder.id, text)} onClose={() => setDescriptionOrderId(undefined)} />}</section>; }

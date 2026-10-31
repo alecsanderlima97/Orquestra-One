@@ -175,3 +175,11 @@
   .agenda-week-column-body .agenda-appointment-card { left: 5px; right: 5px; width: calc(100% - 10px); }
   .agenda-resize-handle { width: 38px; height: 20px; }
 }
+
+.agenda-conflict-badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; background: #fff1e6; color: #9a3412; font-size: 12px; font-weight: 600; }
+.agenda-conflict-note { margin: 12px 0 0; padding: 10px 12px; border-radius: 10px; background: #fff1e6; border: 1px solid #fdba74; color: #9a3412; font-size: 13px; }
+.agenda-conflict-note p { margin: 4px 0 0; }
+.agenda-status-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.agenda-edit-form { display: grid; gap: 10px; margin-top: 4px; }
+.agenda-edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.agenda-edit-error { margin: 0; color: #b42318; font-size: 13px; }

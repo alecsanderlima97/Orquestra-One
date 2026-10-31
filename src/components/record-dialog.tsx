@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Check, LoaderCircle, Search, X } from "lucide-react";
 import { useDemoData, type AppointmentCadence } from "@/src/components/demo-data";
+import { findConflicts, todayDate } from "@/src/lib/agenda";
 import { formatCep, formatCentsInput, formatDocument, formatPhone, onlyDigits, parseCurrencyToCents } from "@/src/lib/brasil";
 import { getCurrentFirebaseUserToken, isFirebaseClientConfigured } from "@/src/lib/firebase-client";
 
@@ -155,8 +156,9 @@ export function RecordDialog({ kind, onClose, workOrderId, defaultInviteKind = "
 
 function AppointmentDialog({ onClose }: { onClose: () => void }) {
   const data = useDemoData();
-  const [form, setForm] = useState(() => ({ ...initial }));
+  const [form, setForm] = useState(() => ({ ...initial, date: todayDate(), endDate: todayDate() }));
   const [error, setError] = useState("");
+  const [acceptedClash, setAcceptedClash] = useState("");
   const selectedClient = useMemo(() => data.clients.find((client) => client.id === form.clientId), [data.clients, form.clientId]);
 
   function update(key: keyof typeof initial, value: string) {
@@ -171,6 +173,12 @@ function AppointmentDialog({ onClose }: { onClose: () => void }) {
     const endDate = cadence === "single" ? form.date : form.endDate;
     const dates = buildAppointmentDates(form.date, endDate, cadence);
     if (!dates.length) return setError("Confira o período informado. A data final precisa ser igual ou posterior à inicial.");
+    const clashes = dates.flatMap((date) => findConflicts({ date, time: form.time, duration: form.duration, professional: form.professional }, data.appointments).map((item) => ({ date, item })));
+    const clashKey = JSON.stringify([dates, form.time, form.duration, form.professional]);
+    if (clashes.length && acceptedClash !== clashKey) {
+      setAcceptedClash(clashKey);
+      return setError(`Atenção: ${form.professional || "o responsável"} já tem compromisso nesse horário (${clashes[0].item.client}, ${clashes[0].date.split("-").reverse().join("/")} às ${clashes[0].item.time}${clashes.length > 1 ? `, e mais ${clashes.length - 1}` : ""}). Envie novamente para agendar mesmo assim, ou ajuste o horário.`);
+    }
     const seriesId = cadence === "single" ? undefined : crypto.randomUUID();
     const baseAppointment = { time: form.time, duration: form.duration, client: selectedClient.name, clientId: selectedClient.id, service: form.service, address: selectedClient.address || `${selectedClient.city} · ${selectedClient.state}`, professional: form.professional, endDate, cadence, seriesId, notes: form.description, workOrderId: "" };
     data.addAppointments(dates.map((date) => ({ ...baseAppointment, date })));
