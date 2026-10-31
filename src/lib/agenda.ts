@@ -33,3 +33,20 @@ export function todayDate() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
+
+/** Converte minutos desde 00:00 em "HH:MM" (passando de 24h volta para 00:xx). */
+export function formatClock(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60) % 24;
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+/** Horario em que o compromisso termina. */
+export function endTime(appointment: Timed) {
+  return formatClock(startMinutes(appointment) + lengthMinutes(appointment));
+}
+
+/** "08:00 – 10:30" */
+export function timeRange(appointment: Timed) {
+  return `${appointment.time} – ${endTime(appointment)}`;
+}

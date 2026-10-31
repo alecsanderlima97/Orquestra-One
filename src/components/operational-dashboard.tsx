@@ -11,7 +11,7 @@ import { formatBRL } from "@/src/domain/money";
 import type { SectionId } from "@/src/domain/types";
 import { useDemoData, type AppointmentPatch, type AppointmentRecord, type ClientRecord, type FinanceRecord, type WorkOrderRecord } from "@/src/components/demo-data";
 import { RecordDialog, type RecordKind } from "@/src/components/record-dialog";
-import { findConflicts, lengthMinutes, startMinutes, todayDate } from "@/src/lib/agenda";
+import { endTime, findConflicts, lengthMinutes, startMinutes, timeRange, todayDate } from "@/src/lib/agenda";
 
 const navigation: Array<{ id: Exclude<SectionId, "settings">; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Visão geral", icon: LayoutDashboard }, { id: "agenda", label: "Agenda", icon: CalendarDays },
@@ -173,6 +173,7 @@ export function OperationalDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dialog, setDialog] = useState<RecordKind | null>(null);
   const [workOrderId, setWorkOrderId] = useState<string>();
+  const [orderLink, setOrderLink] = useState<{ appointmentId: string; clientId: string; service: string; description: string }>();
   const copy = sectionCopy[activeSection];
   const [today, setToday] = useState("");
   useEffect(() => { setToday(todayDate()); }, []);
@@ -180,6 +181,7 @@ export function OperationalDashboard() {
 
   function navigate(section: SectionId) { setActiveSection(section); setQuickOpen(false); setMobileMenuOpen(false); }
   function open(kind: RecordKind, orderId?: string) { setWorkOrderId(orderId); setDialog(kind); setQuickOpen(false); }
+  function createOrderFromAppointment(appointment: AppointmentRecord) { setOrderLink({ appointmentId: appointment.id, clientId: appointment.clientId, service: appointment.service, description: appointment.notes }); open("order"); }
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileMenuOpen ? "sidebar-open" : ""}`}>
@@ -194,10 +196,10 @@ export function OperationalDashboard() {
       <div className="page-wrap"><div className="page-heading"><div><p className="eyebrow">{copy.eyebrow}</p><h1>{copy.title}</h1><p className="page-description">{copy.description}</p></div><div className="heading-actions"><button className="secondary-button" type="button" onClick={() => navigate("agenda")}><CalendarClock size={17} /> Hoje</button><button className="primary-button" type="button" onClick={() => setQuickOpen((value) => !value)}><Plus size={18} /> Novo registro</button></div></div>
       {quickOpen && <QuickActions onOpen={open} onClose={() => setQuickOpen(false)} />}
       {activeSection === "overview" && <Overview onNavigate={navigate} onOpen={open} />}
-      {activeSection === "agenda" && <AgendaView onOpen={open} />}{activeSection === "orders" && <OrdersView onOpen={open} />}{activeSection === "finance" && <FinanceView onOpen={open} />}{activeSection === "stock" && <StockView onOpen={open} />}{activeSection === "clients" && <ClientsView onOpen={open} />}{activeSection === "suppliers" && <SuppliersView onOpen={open} />}{activeSection === "reports" && <ReportsView />}{activeSection === "team" && <TeamView onOpen={open} />}{activeSection === "settings" && <SettingsView />}
+      {activeSection === "agenda" && <AgendaView onOpen={open} onCreateOrder={createOrderFromAppointment} />}{activeSection === "orders" && <OrdersView onOpen={open} />}{activeSection === "finance" && <FinanceView onOpen={open} />}{activeSection === "stock" && <StockView onOpen={open} />}{activeSection === "clients" && <ClientsView onOpen={open} />}{activeSection === "suppliers" && <SuppliersView onOpen={open} />}{activeSection === "reports" && <ReportsView />}{activeSection === "team" && <TeamView onOpen={open} />}{activeSection === "settings" && <SettingsView />}
       </div></main>
     <nav className="mobile-nav" aria-label="Navegação mobile">{navigation.slice(0, 5).map(({ id, label, icon: Icon }) => <button key={id} type="button" className={activeSection === id ? "mobile-nav-active" : ""} onClick={() => navigate(id)}><Icon size={19} /><span>{label.split(" ")[0]}</span></button>)}</nav>
-    {dialog && <RecordDialog kind={dialog} workOrderId={workOrderId} onClose={() => setDialog(null)} />}
+    {dialog && <RecordDialog kind={dialog} workOrderId={workOrderId} prefill={dialog === "order" ? orderLink : undefined} onOrderCreated={dialog === "order" && orderLink ? (orderId) => data.updateAppointment(orderLink.appointmentId, { workOrderId: orderId }) : undefined} onClose={() => { setDialog(null); setOrderLink(undefined); }} />}
   </div>;
 }
 
@@ -216,12 +218,13 @@ function Overview({ onNavigate, onOpen }: { onNavigate: (section: SectionId) => 
 
 function Metric({ icon: Icon, label, value, detail, tone }: { icon: LucideIcon; label: string; value: string; detail: string; tone: string }) { return <article className="metric-card"><div className={`metric-icon metric-icon-${tone}`}><Icon size={18} /></div><p>{label}</p><strong>{value}</strong><span className="metric-detail">{detail}</span></article>; }
 
-function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => void }) {
+function AgendaView({ onOpen, onCreateOrder }: { onOpen: (kind: RecordKind, id?: string) => void; onCreateOrder: (appointment: AppointmentRecord) => void }) {
   const data = useDemoData();
-  const [mode, setMode] = useState<AgendaMode>("week");
+  const [mode, setMode] = useState<AgendaMode>(() => (typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches ? "day" : "week"));
   const [selectedDate, setSelectedDate] = useState(todayDate);
   const [query, setQuery] = useState("");
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>();
+  const [detailAppointmentId, setDetailAppointmentId] = useState<string>();
   const weekStart = startOfAgendaWeek(selectedDate);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => moveAgendaDate(weekStart, index)), [weekStart]);
   const list = useMemo(() => data.appointments.filter((item) => {
@@ -238,6 +241,7 @@ function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => voi
   const selectedClient = selectedAppointment ? data.clients.find((client) => client.id === selectedAppointment.clientId) : undefined;
   const selectedConflicts = selectedAppointment ? findConflicts(selectedAppointment, data.appointments) : [];
   const conflictCount = list.filter((item) => findConflicts(item, data.appointments).length > 0).length;
+  const detailAppointment = data.appointments.find((item) => item.id === detailAppointmentId);
   const periodLabel = mode === "day"
     ? agendaLongDateLabel(selectedDate)
     : mode === "week"
@@ -285,38 +289,40 @@ function AgendaView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => voi
     </div>
     <div className="agenda-calendar-layout">
       <div className="agenda-calendar-main">
-        {mode === "day" && <AgendaDayView date={selectedDate} appointments={list} onSelect={selectAppointment} />}
-        {mode === "week" && <AgendaWeekView days={weekDays} appointments={list} selectedDate={selectedDate} onSelectDate={chooseDate} onSelect={selectAppointment} onUpdate={updateAppointment} />}
+        {mode === "day" && <AgendaDayView date={selectedDate} appointments={list} onSelect={selectAppointment} onOpenDetail={setDetailAppointmentId} />}
+        {mode === "week" && <AgendaWeekView days={weekDays} appointments={list} selectedDate={selectedDate} onSelectDate={chooseDate} onSelect={selectAppointment} onOpenDetail={setDetailAppointmentId} onUpdate={updateAppointment} />}
         {mode === "month" && <AgendaMonthView date={selectedDate} appointments={list} selectedDate={selectedDate} onSelectDate={chooseDate} />}
         {!list.length && <div className="agenda-filter-empty"><EmptyState message="Nenhum compromisso corresponde ao filtro neste período." /></div>}
       </div>
-      <AgendaDetails appointment={selectedAppointment} client={selectedClient} conflicts={selectedConflicts} onOpen={onOpen} onUpdate={updateAppointment} onRemove={(appointmentId) => { data.removeAppointment(appointmentId); setSelectedAppointmentId(undefined); }} />
+      <AgendaDetails appointment={selectedAppointment} client={selectedClient} conflicts={selectedConflicts} onOpenDetail={setDetailAppointmentId} onOpen={onOpen} onUpdate={updateAppointment} onRemove={(appointmentId) => { data.removeAppointment(appointmentId); setSelectedAppointmentId(undefined); }} />
     </div>
+    {detailAppointment && <AppointmentOrderDialog appointment={detailAppointment} onClose={() => setDetailAppointmentId(undefined)} onOpen={onOpen} onCreateOrder={onCreateOrder} />}
   </section>;
 }
 
 type AgendaPointerHandler = (event: ReactPointerEvent<HTMLElement>) => void;
 
-function AgendaAppointmentCard({ appointment, onSelect, compact = false, style, onStartDrag, onStartResize }: { appointment: AppointmentRecord; onSelect: (appointment: AppointmentRecord) => void; compact?: boolean; style?: CSSProperties; onStartDrag?: AgendaPointerHandler; onStartResize?: AgendaPointerHandler }) {
+function AgendaAppointmentCard({ appointment, onSelect, onOpenDetail, compact = false, style, onStartDrag, onStartResize }: { appointment: AppointmentRecord; onSelect: (appointment: AppointmentRecord) => void; onOpenDetail?: (appointmentId: string) => void; compact?: boolean; style?: CSSProperties; onStartDrag?: AgendaPointerHandler; onStartResize?: AgendaPointerHandler }) {
   return <div
     className={`agenda-appointment-card ${compact ? "agenda-appointment-card-compact" : ""} ${onStartDrag ? "agenda-appointment-card-draggable" : ""}`}
     role="button"
     tabIndex={0}
     style={style}
-    aria-label={`${appointment.time} ${appointment.client} ${appointment.service}. Arraste para mover. Puxe a alça inferior para alterar a duração.`}
-    onClick={() => onSelect(appointment)}
+    aria-label={`${timeRange(appointment)} ${appointment.client} ${appointment.service}. Clique duas vezes para abrir a ordem de serviço e os dados do cliente. Arraste para mover. Puxe a alça inferior para alterar a duração.`}
+    onClick={() => { onSelect(appointment); if (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches) onOpenDetail?.(appointment.id); }}
+    onDoubleClick={() => onOpenDetail?.(appointment.id)}
     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(appointment); } }}
     onPointerDown={(event) => { if (!onStartDrag || (event.pointerType === "mouse" && event.button !== 0)) return; event.preventDefault(); onStartDrag(event as ReactPointerEvent<HTMLElement>); }}
   >
-    <span className="agenda-card-time"><i className={`agenda-professional-dot agenda-professional-${professionalColor(appointment.professional)}`} />{appointment.time}</span>
+    <span className="agenda-card-time"><i className={`agenda-professional-dot agenda-professional-${professionalColor(appointment.professional)}`} />{timeRange(appointment)}</span>
     <span className="agenda-card-copy"><strong>{appointment.client}</strong><span>{appointment.service}</span>{!compact && <small><MapPin size={11} /> {appointment.address}</small>}</span>
     <StatusPill status={appointment.status} />
-    {onStartResize && <button className="agenda-resize-handle" type="button" aria-label={`Alterar duração de ${appointment.client}`} onClick={(event) => event.stopPropagation()} onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); onStartResize(event as ReactPointerEvent<HTMLElement>); }}><ArrowUpDown size={13} /></button>}
+    {onStartResize && <button className="agenda-resize-handle" type="button" aria-label={`Alterar duração de ${appointment.client}`} onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); onStartResize(event as ReactPointerEvent<HTMLElement>); }}><ArrowUpDown size={13} /></button>}
   </div>;
 }
 
-function AgendaDayView({ date, appointments, onSelect }: { date: string; appointments: AppointmentRecord[]; onSelect: (appointment: AppointmentRecord) => void }) {
-  return <div className="agenda-day-view"><div className="agenda-calendar-caption"><div><p className="eyebrow">Agenda do dia</p><h3>{agendaLongDateLabel(date)}</h3></div><span>{appointments.length} compromisso(s)</span></div><div className="agenda-time-grid">{AGENDA_HOURS.map((hour) => { const hourAppointments = appointments.filter((appointment) => appointmentHour(appointment) === Number(hour.slice(0, 2))); return <div className="agenda-time-row" key={hour}><div className="agenda-hour-label"><Clock3 size={13} />{hour}</div><div className="agenda-time-slot">{hourAppointments.length ? hourAppointments.map((appointment) => <AgendaAppointmentCard key={appointment.id} appointment={appointment} onSelect={onSelect} />) : <span className="agenda-free-slot">Horário livre</span>}</div></div>; })}</div></div>;
+function AgendaDayView({ date, appointments, onSelect, onOpenDetail }: { date: string; appointments: AppointmentRecord[]; onSelect: (appointment: AppointmentRecord) => void; onOpenDetail: (appointmentId: string) => void }) {
+  return <div className="agenda-day-view"><div className="agenda-calendar-caption"><div><p className="eyebrow">Agenda do dia</p><h3>{agendaLongDateLabel(date)}</h3></div><span>{appointments.length} compromisso(s)</span></div><div className="agenda-time-grid">{AGENDA_HOURS.map((hour) => { const hourAppointments = appointments.filter((appointment) => appointmentHour(appointment) === Number(hour.slice(0, 2))); return <div className="agenda-time-row" key={hour}><div className="agenda-hour-label"><Clock3 size={13} />{hour}</div><div className="agenda-time-slot">{hourAppointments.length ? hourAppointments.map((appointment) => <AgendaAppointmentCard key={appointment.id} appointment={appointment} onSelect={onSelect} onOpenDetail={onOpenDetail} />) : <span className="agenda-free-slot">Horário livre</span>}</div></div>; })}</div></div>;
 }
 
 type AgendaInteraction = {
@@ -333,7 +339,7 @@ type AgendaInteraction = {
   durationMinutes: number;
 };
 
-function AgendaWeekView({ days, appointments, selectedDate, onSelectDate, onSelect, onUpdate }: { days: string[]; appointments: AppointmentRecord[]; selectedDate: string; onSelectDate: (date: string) => void; onSelect: (appointment: AppointmentRecord) => void; onUpdate: (appointmentId: string, patch: AppointmentPatch) => void }) {
+function AgendaWeekView({ days, appointments, selectedDate, onSelectDate, onSelect, onOpenDetail, onUpdate }: { onOpenDetail: (appointmentId: string) => void; days: string[]; appointments: AppointmentRecord[]; selectedDate: string; onSelectDate: (date: string) => void; onSelect: (appointment: AppointmentRecord) => void; onUpdate: (appointmentId: string, patch: AppointmentPatch) => void }) {
   const [interaction, setInteraction] = useState<AgendaInteraction | null>(null);
   const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -389,7 +395,7 @@ function AgendaWeekView({ days, appointments, selectedDate, onSelectDate, onSele
       <button className="agenda-week-day" type="button" onClick={() => onSelectDate(date)}><span>{agendaShortWeekday(date)}</span><strong>{parseAgendaDate(date).getDate()}</strong><small>{dayAppointments.length} ag.</small></button>
       <div className="agenda-week-column-body" ref={(node) => { columnRefs.current[date] = node; }} data-agenda-date={date}>
         {AGENDA_HOURS.map((hour, index) => <div className="agenda-week-time-slot" key={hour} aria-label={`${agendaShortWeekday(date)} ${hour}`} style={{ top: `${index * AGENDA_HOUR_HEIGHT}px` }} />)}
-        {dayAppointments.map(({ appointment, minutes, durationMinutes }) => <AgendaAppointmentCard key={appointment.id} appointment={{ ...appointment, date, time: formatAgendaTime(minutes), duration: formatAgendaDuration(durationMinutes) }} onSelect={onSelect} compact style={{ top: `${(minutes - AGENDA_START_MINUTES) * AGENDA_HOUR_HEIGHT / 60 + 3}px`, height: `${Math.max(28, durationMinutes * AGENDA_HOUR_HEIGHT / 60 - 6)}px` }} onStartDrag={(event) => beginInteraction(event, appointment, "drag")} onStartResize={(event) => beginInteraction(event, appointment, "resize")} />)}
+        {dayAppointments.map(({ appointment, minutes, durationMinutes }) => <AgendaAppointmentCard key={appointment.id} appointment={{ ...appointment, date, time: formatAgendaTime(minutes), duration: formatAgendaDuration(durationMinutes) }} onSelect={onSelect} onOpenDetail={onOpenDetail} compact style={{ top: `${(minutes - AGENDA_START_MINUTES) * AGENDA_HOUR_HEIGHT / 60 + 3}px`, height: `${Math.max(28, durationMinutes * AGENDA_HOUR_HEIGHT / 60 - 6)}px` }} onStartDrag={(event) => beginInteraction(event, appointment, "drag")} onStartResize={(event) => beginInteraction(event, appointment, "resize")} />)}
       </div>
     </div>;
   })}</div></div>;
@@ -420,6 +426,7 @@ type AgendaDetailsProps = {
   client?: ClientRecord;
   conflicts: AppointmentRecord[];
   onOpen: (kind: RecordKind, id?: string) => void;
+  onOpenDetail: (appointmentId: string) => void;
   onUpdate: (appointmentId: string, patch: AppointmentPatch) => void;
   onRemove: (appointmentId: string) => void;
 };
@@ -430,7 +437,7 @@ function AgendaDetails(props: AgendaDetailsProps) {
   return <AgendaDetailsBody key={appointment.id} {...props} appointment={appointment} />;
 }
 
-function AgendaDetailsBody({ appointment, client, conflicts, onOpen, onUpdate, onRemove }: Omit<AgendaDetailsProps, "appointment"> & { appointment: AppointmentRecord }) {
+function AgendaDetailsBody({ appointment, client, conflicts, onOpen, onOpenDetail, onUpdate, onRemove }: Omit<AgendaDetailsProps, "appointment"> & { appointment: AppointmentRecord }) {
   const data = useDemoData();
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
@@ -465,15 +472,86 @@ function AgendaDetailsBody({ appointment, client, conflicts, onOpen, onUpdate, o
         <label className="field-wrap">Duração<input value={draft.duration} placeholder="1h 30" onChange={(event) => setDraft((previous) => ({ ...previous, duration: event.target.value }))} /></label>
         <label className="field-wrap">Responsável<input value={draft.professional} onChange={(event) => setDraft((previous) => ({ ...previous, professional: event.target.value }))} /></label>
       </div>
+      {isValidAgendaTime(draft.time) && isValidAgendaDuration(draft.duration) && <p className="agenda-edit-hint">Termina às {endTime({ time: draft.time, duration: draft.duration })}</p>}
       <label className="field-wrap">Observações<textarea rows={3} value={draft.notes} onChange={(event) => setDraft((previous) => ({ ...previous, notes: event.target.value }))} /></label>
       {error && <p className="agenda-edit-error" role="alert">{error}</p>}
       <div className="agenda-detail-actions"><button className="secondary-button" type="button" onClick={() => { setEditing(false); setError(""); }}>Cancelar</button><button className="primary-button" type="button" onClick={save}>Salvar alterações</button></div>
     </div> : <>
-      <div className="agenda-detail-list"><div><CalendarDays size={15} /><span><small>Data</small><strong>{agendaLongDateLabel(appointment.date)}</strong></span></div>{appointment.endDate && appointment.endDate !== appointment.date && <div><CalendarDays size={15} /><span><small>Período reservado</small><strong>Até {agendaLongDateLabel(appointment.endDate)} · {appointmentCadenceLabel(appointment.cadence)}</strong></span></div>}<div><Clock3 size={15} /><span><small>Horário e duração</small><strong>{appointment.time} · {appointment.duration}</strong></span></div><div><Users size={15} /><span><small>Responsável</small><strong>{appointment.professional}</strong></span></div><div><MapPin size={15} /><span><small>Local</small><strong>{appointment.address}</strong></span></div>{client?.phone && <div><MessageCircle size={15} /><span><small>Contato rápido</small><WhatsAppLink phone={client.phone} label="Enviar lembrete pelo WhatsApp" message={`Olá, ${client.name}! Confirmando o serviço de ${appointment.service} em ${agendaLongDateLabel(appointment.date)} às ${appointment.time}.`} /></span></div>}</div>
+      <div className="agenda-detail-list"><div><CalendarDays size={15} /><span><small>Data</small><strong>{agendaLongDateLabel(appointment.date)}</strong></span></div>{appointment.endDate && appointment.endDate !== appointment.date && <div><CalendarDays size={15} /><span><small>Período reservado</small><strong>Até {agendaLongDateLabel(appointment.endDate)} · {appointmentCadenceLabel(appointment.cadence)}</strong></span></div>}<div><Clock3 size={15} /><span><small>Horário e duração</small><strong>{timeRange(appointment)} · {appointment.duration}</strong></span></div><div><Users size={15} /><span><small>Responsável</small><strong>{appointment.professional}</strong></span></div><div><MapPin size={15} /><span><small>Local</small><strong>{appointment.address}</strong></span></div>{client?.phone && <div><MessageCircle size={15} /><span><small>Contato rápido</small><WhatsAppLink phone={client.phone} label="Enviar lembrete pelo WhatsApp" message={`Olá, ${client.name}! Confirmando o serviço de ${appointment.service} em ${agendaLongDateLabel(appointment.date)} às ${appointment.time}.`} /></span></div>}</div>
       {appointment.notes && <div className="agenda-notes"><small>Observações</small><p>{appointment.notes}</p></div>}
-      <div className="agenda-detail-actions"><button className="secondary-button" type="button" onClick={() => setEditing(true)}>Editar compromisso</button>{appointment.workOrderId && <button className="primary-button" type="button" onClick={() => onOpen("diary", appointment.workOrderId)}>Abrir diário da OS</button>}<button className="table-action" type="button" onClick={remove}>Remover</button></div>
+      <div className="agenda-detail-actions"><button className="primary-button" type="button" onClick={() => onOpenDetail(appointment.id)}>Ver ordem e dados do cliente</button><button className="secondary-button" type="button" onClick={() => setEditing(true)}>Editar compromisso</button>{appointment.workOrderId && <button className="secondary-button" type="button" onClick={() => onOpen("diary", appointment.workOrderId)}>Abrir diário da OS</button>}<button className="table-action" type="button" onClick={remove}>Remover</button></div>
     </>}
   </aside>;
+}
+
+function AppointmentOrderDialog({ appointment, onClose, onOpen, onCreateOrder }: { appointment: AppointmentRecord; onClose: () => void; onOpen: (kind: RecordKind, id?: string) => void; onCreateOrder: (appointment: AppointmentRecord) => void }) {
+  const data = useDemoData();
+  const client = data.clients.find((item) => item.id === appointment.clientId);
+  const order = appointment.workOrderId ? data.workOrders.find((item) => item.id === appointment.workOrderId) : undefined;
+  const otherOrders = data.workOrders.filter((item) => item.clientId === appointment.clientId && item.id !== order?.id);
+  const charges = order ? data.finance.filter((item) => item.originId === order.id) : [];
+  const stockName = (stockId: string) => data.stock.find((item) => item.id === stockId)?.name ?? stockId;
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  function closeOrder() {
+    if (order && window.confirm(`Fechar a ${order.id}? Isso lança a cobrança no financeiro e baixa os materiais do estoque.`)) data.closeWorkOrder(order.id);
+  }
+
+  return <div className="dialog-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="record-dialog order-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="order-detail-title">
+      <header><div><p className="eyebrow">Agendamento · {agendaLongDateLabel(appointment.date)}</p><h2 id="order-detail-title">{appointment.client}</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Fechar"><X size={18} /></button></header>
+      <div className="dialog-body order-detail-body">
+        <section className="order-detail-section">
+          <h3>Compromisso</h3>
+          <dl className="order-detail-grid">
+            <div><dt>Serviço</dt><dd>{appointment.service}</dd></div>
+            <div><dt>Horário</dt><dd>{timeRange(appointment)} · {appointment.duration}</dd></div>
+            <div><dt>Responsável</dt><dd>{appointment.professional}</dd></div>
+            <div><dt>Situação</dt><dd><StatusPill status={appointment.status} /></dd></div>
+            <div className="order-detail-wide"><dt>Local</dt><dd>{appointment.address}</dd></div>
+            {appointment.notes && <div className="order-detail-wide"><dt>Observações</dt><dd>{appointment.notes}</dd></div>}
+          </dl>
+        </section>
+        <section className="order-detail-section">
+          <h3>Cliente</h3>
+          {client ? <>
+            <dl className="order-detail-grid">
+              <div><dt>Nome</dt><dd>{client.name}</dd></div>
+              <div><dt>Tipo</dt><dd>{client.kind === "pj" ? "Pessoa jurídica" : "Pessoa física"}{client.document ? ` · ${client.document}` : ""}</dd></div>
+              <div><dt>Telefone</dt><dd>{client.phone || "Não informado"}</dd></div>
+              <div><dt>E-mail</dt><dd>{client.email || "Não informado"}</dd></div>
+              <div className="order-detail-wide"><dt>Endereço</dt><dd>{[client.address, [client.city, client.state].filter(Boolean).join(" · "), client.cep].filter(Boolean).join(" — ") || "Não informado"}</dd></div>
+            </dl>
+            <WhatsAppLink phone={client.phone} label="Conversar no WhatsApp" message={`Olá, ${client.name}! Sobre o serviço de ${appointment.service} em ${agendaLongDateLabel(appointment.date)} às ${appointment.time}.`} />
+            {client.history.length > 0 && <ul className="order-detail-list">{client.history.slice(0, 5).map((entry, index) => <li key={`${index}-${entry}`}>{entry}</li>)}</ul>}
+          </> : <p className="order-detail-empty">Cadastro do cliente não encontrado.</p>}
+        </section>
+        <section className="order-detail-section">
+          <h3>Ordem de serviço</h3>
+          {order ? <>
+            <div className="order-detail-meta"><strong>{order.id}</strong><StatusPill status={order.status} /><span>{formatBRL(order.amountCents)}</span><small>{order.updatedAt}</small></div>
+            <dl className="order-detail-grid">
+              <div className="order-detail-wide"><dt>Descrição atual{(order.descriptionHistory?.length ?? 0) > 1 ? ` · ${order.descriptionHistory?.length} versões salvas` : ""}</dt><dd>{order.description}</dd></div>
+              <div className="order-detail-wide"><dt>Materiais vinculados</dt><dd>{order.materialLines.length ? order.materialLines.map((line) => `${line.quantity}× ${stockName(line.stockId)}`).join(", ") : "Nenhum"}</dd></div>
+              {charges.map((charge) => <div className="order-detail-wide" key={charge.id}><dt>Cobrança gerada</dt><dd>{formatBRL(charge.amountCents)} · vence {charge.dueDate} · {charge.status === "paid" ? "pago" : "em aberto"}</dd></div>)}
+            </dl>
+            <h4 className="order-detail-subtitle">Diário ({order.diary.length})</h4>
+            {order.diary.length ? <ul className="order-detail-list">{order.diary.map((entry) => <li key={entry.id}><time>{entry.createdAt}</time>{entry.text}</li>)}</ul> : <p className="order-detail-empty">Nenhum registro no diário ainda.</p>}
+          </> : <div className="order-detail-empty"><p>Este agendamento ainda não tem ordem de serviço.</p><button className="primary-button" type="button" onClick={() => { onClose(); onCreateOrder(appointment); }}>Criar ordem de serviço</button></div>}
+        </section>
+        {otherOrders.length > 0 && <section className="order-detail-section">
+          <h3>Outras ordens deste cliente</h3>
+          <ul className="order-detail-list">{otherOrders.map((item) => <li key={item.id}><strong>{item.id}</strong> · {item.service} · {formatBRL(item.amountCents)}<small>{item.updatedAt}</small></li>)}</ul>
+        </section>}
+      </div>
+      <footer><button className="secondary-button" type="button" onClick={onClose}>Fechar</button>{order && order.status !== "completed" && <button className="secondary-button" type="button" onClick={closeOrder}>Fechar ordem</button>}{order && <button className="primary-button" type="button" onClick={() => { onClose(); onOpen("diary", order.id); }}>Registrar no diário</button>}</footer>
+    </section>
+  </div>;
 }
 
 function OrdersView({ onOpen }: { onOpen: (kind: RecordKind, id?: string) => void }) { const data = useDemoData(); const [filter, setFilter] = useState<"all" | WorkOrderRecord["status"]>("all"); const [query, setQuery] = useState(""); const [descriptionOrderId, setDescriptionOrderId] = useState<string>(); const list = data.workOrders.filter((item) => (filter === "all" || item.status === filter) && `${item.id} ${item.client} ${item.service}`.toLowerCase().includes(query.toLowerCase())); const descriptionOrder = data.workOrders.find((order) => order.id === descriptionOrderId); return <section className="panel full-panel"><PanelHeader eyebrow={`${data.workOrders.length} ordens registradas`} title="Acompanhe os serviços" action="Nova ordem" onAction={() => onOpen("order")} /><div className="view-toolbar"><div className="filter-pills"><button className={`filter-pill ${filter === "all" ? "filter-pill-active" : ""}`} type="button" onClick={() => setFilter("all")}>Todas <span>{data.workOrders.length}</span></button><button className={`filter-pill ${filter === "in_progress" ? "filter-pill-active" : ""}`} type="button" onClick={() => setFilter("in_progress")}>Em andamento <span>{data.workOrders.filter((item) => item.status === "in_progress").length}</span></button><button className={`filter-pill ${filter === "waiting" ? "filter-pill-active" : ""}`} type="button" onClick={() => setFilter("waiting")}>Aguardando <span>{data.workOrders.filter((item) => item.status === "waiting").length}</span></button></div><label className="inline-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar OS ou cliente" /></label></div><div className="orders-table"><div className="table-head"><span>Ordem</span><span>Serviço / cliente</span><span>Valor</span><span>Status</span><span>Ações</span></div>{list.map((order) => <OrderRow key={order.id} order={order} onDiary={() => onOpen("diary", order.id)} onDescription={() => setDescriptionOrderId(order.id)} onClose={() => data.closeWorkOrder(order.id)} />)}{!list.length && <EmptyState message="Nenhuma ordem corresponde aos filtros." />}</div>{descriptionOrder && <DescriptionHistory order={descriptionOrder} onSave={(text) => data.reviseWorkOrderDescription(descriptionOrder.id, text)} onClose={() => setDescriptionOrderId(undefined)} />}</section>; }

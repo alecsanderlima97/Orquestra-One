@@ -37,7 +37,7 @@ export type SupplierRecord = {
 
 export type AppointmentCadence = "single" | "daily" | "weekdays" | "weekly";
 export type AppointmentRecord = (typeof appointments)[number] & { clientId: string; date: string; endDate?: string; cadence?: AppointmentCadence; seriesId?: string; notes: string; workOrderId?: string };
-export type AppointmentPatch = Partial<Pick<AppointmentRecord, "date" | "time" | "duration" | "endDate" | "status" | "professional" | "notes">>;
+export type AppointmentPatch = Partial<Pick<AppointmentRecord, "date" | "time" | "duration" | "endDate" | "status" | "professional" | "notes" | "workOrderId">>;
 export type DescriptionRevision = { id: string; text: string; createdAt: string };
 export type WorkOrderRecord = (typeof workOrders)[number] & { clientId: string; description: string; descriptionHistory?: DescriptionRevision[]; diary: Array<{ id: string; text: string; createdAt: string }>; materialLines: Array<{ stockId: string; quantity: number }> };
 export type FinanceRecord = (typeof financeItems)[number] & { originId?: string; category: string; paidAt?: string };
