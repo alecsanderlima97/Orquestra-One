@@ -28,6 +28,25 @@ const initial = {
   name: "", kind: "pf", document: "", email: "", phone: "", cep: "", address: "", number: "", neighborhood: "", city: "", state: "", category: "", clientId: "", service: "", description: "", date: "2026-10-29", endDate: "2026-10-29", cadence: "single", time: "08:00", duration: "1h", professional: "Você", amount: "", financeType: "receivable", party: "", dueDate: "", stockCategory: "consumable", quantity: "1", unit: "un", minimum: "0", location: "Estoque principal", role: "Profissional", access: "Agenda e serviços", inviteKind: "team", tenantId: "", stockId: "", materialQuantity: "0", text: "",
 };
 
+function isoToDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+}
+
+function addDaysISO(value: string, amount: number) {
+  const date = isoToDate(value);
+  date.setDate(date.getDate() + amount);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function daysBetweenISO(start: string, end: string) {
+  return Math.round((isoToDate(end).getTime() - isoToDate(start).getTime()) / 86400000);
+}
+
+function shortBR(value: string) {
+  return value.split("-").reverse().slice(0, 2).join("/");
+}
+
 function buildAppointmentDates(startValue: string, endValue: string, cadence: AppointmentCadence) {
   const [startYear, startMonth, startDay] = startValue.split("-").map(Number);
   const [endYear, endMonth, endDay] = endValue.split("-").map(Number);
@@ -169,6 +188,29 @@ function AppointmentDialog({ onClose }: { onClose: () => void }) {
     setForm((previous) => ({ ...previous, [key]: value }));
   }
 
+  function changeStart(value: string) {
+    setForm((previous) => {
+      if (previous.cadence === "single" || !value) return { ...previous, date: value };
+      const span = Math.max(0, daysBetweenISO(previous.date, previous.endDate) || 0);
+      return { ...previous, date: value, endDate: addDaysISO(value, span) };
+    });
+  }
+
+  function changeCadence(value: string) {
+    setForm((previous) => {
+      const needsPeriod = value !== "single" && (!previous.endDate || previous.endDate <= previous.date);
+      return { ...previous, cadence: value, endDate: needsPeriod ? addDaysISO(previous.date, 6) : previous.endDate };
+    });
+  }
+
+  function changeDayCount(value: string) {
+    const count = Math.min(365, Math.max(1, Math.floor(Number(value)) || 1));
+    setForm((previous) => ({ ...previous, endDate: addDaysISO(previous.date, count - 1) }));
+  }
+
+  const periodDates = form.cadence === "single" ? [form.date] : buildAppointmentDates(form.date, form.endDate, form.cadence as AppointmentCadence);
+  const periodDays = form.date && form.endDate ? Math.max(1, daysBetweenISO(form.date, form.endDate) + 1) : 1;
+
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -189,7 +231,9 @@ function AppointmentDialog({ onClose }: { onClose: () => void }) {
     onClose();
   }
 
-  return <div className="dialog-backdrop" role="presentation"><section className="record-dialog" role="dialog" aria-modal="true" aria-labelledby="appointment-dialog-title"><header><div><p className="eyebrow">Agenda</p><h2 id="appointment-dialog-title">Novo agendamento</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Fechar formulário"><X size={18} /></button></header><form onSubmit={submit}><div className="dialog-body"><Select label="Cliente" value={form.clientId} onChange={(value) => update("clientId", value)} options={data.clients.map((client) => ({ value: client.id, label: client.name }))} required /><Field label="Serviço previsto" value={form.service} onChange={(value) => update("service", value)} required /><Select label="Responsável pelo serviço" value={form.professional} onChange={(value) => update("professional", value)} options={[{ value: "Você", label: "Você" }, ...data.team.map((member) => ({ value: member.name, label: member.name }))]} /><div className="dialog-grid"><Field label="Data inicial" type="date" value={form.date} onChange={(value) => update("date", value)} required /><Field label="Horário diário" type="time" value={form.time} onChange={(value) => update("time", value)} required /></div><div className="dialog-grid"><Select label="Repetição do serviço" value={form.cadence} onChange={(value) => update("cadence", value)} options={[{ value: "single", label: "Somente este dia" }, { value: "daily", label: "Todos os dias" }, { value: "weekdays", label: "Dias úteis (seg. a sex.)" }, { value: "weekly", label: "Uma vez por semana" }]} /><Field label="Data final do período" type="date" value={form.endDate} onChange={(value) => update("endDate", value)} required={form.cadence !== "single"} /></div><Select label="Duração por visita" value={form.duration} onChange={(value) => update("duration", value)} options={[{ value: "1h", label: "1 hora" }, { value: "2h", label: "2 horas" }, { value: "3h", label: "3 horas" }, { value: "Dia", label: "Dia inteiro" }]} />{form.cadence !== "single" && <div className="dialog-notice">O período cria um compromisso em cada dia compatível, sempre no horário informado. Outros serviços podem ser incluídos no mesmo dia em horários diferentes.</div>}<TextArea label="Descrição e observações" value={form.description} onChange={(value) => update("description", value)} placeholder="Ex.: pintura da casa da cliente, etapa 1 de 3 meses, materiais e pendências." /></div>{error && <p className="dialog-error">{error}</p>}<footer><button className="secondary-button" type="button" onClick={onClose}>Cancelar</button><button className="primary-button" type="submit"><Check size={16} /> Agendar serviço</button></footer></form></section></div>;
+  return <div className="dialog-backdrop" role="presentation"><section className="record-dialog" role="dialog" aria-modal="true" aria-labelledby="appointment-dialog-title"><header><div><p className="eyebrow">Agenda</p><h2 id="appointment-dialog-title">Novo agendamento</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Fechar formulário"><X size={18} /></button></header><form onSubmit={submit}><div className="dialog-body"><Select label="Cliente" value={form.clientId} onChange={(value) => update("clientId", value)} options={data.clients.map((client) => ({ value: client.id, label: client.name }))} required /><Field label="Serviço previsto" value={form.service} onChange={(value) => update("service", value)} required /><Select label="Responsável pelo serviço" value={form.professional} onChange={(value) => update("professional", value)} options={[{ value: "Você", label: "Você" }, ...data.team.map((member) => ({ value: member.name, label: member.name }))]} /><div className="dialog-grid"><Field label="Data inicial" type="date" value={form.date} onChange={changeStart} required /><Field label="Horário diário" type="time" value={form.time} onChange={(value) => update("time", value)} required /></div><Select label="Quanto tempo dura o serviço?" value={form.cadence} onChange={changeCadence} options={[{ value: "single", label: "Só um dia" }, { value: "daily", label: "Vários dias seguidos (inclui sábado e domingo)" }, { value: "weekdays", label: "Vários dias úteis (segunda a sexta)" }, { value: "weekly", label: "Uma vez por semana" }]} />
+          {form.cadence !== "single" && <><div className="dialog-grid"><Field label="Quantos dias (período)" type="number" value={String(periodDays)} onChange={changeDayCount} /><Field label="Termina em" type="date" value={form.endDate} onChange={(value) => update("endDate", value)} required /></div>
+          <p className="agenda-period-hint">{periodDates.length ? `Vai ocupar a agenda de ${form.professional || "o responsável"} em ${periodDates.length} dia(s), de ${shortBR(periodDates[0])} a ${shortBR(periodDates[periodDates.length - 1])}, sempre às ${form.time}.` : "A data final precisa ser igual ou posterior à inicial."}</p></>}<Select label="Duração por visita" value={form.duration} onChange={(value) => update("duration", value)} options={[{ value: "1h", label: "1 hora" }, { value: "2h", label: "2 horas" }, { value: "3h", label: "3 horas" }, { value: "Dia", label: "Dia inteiro" }]} />{form.cadence !== "single" && <div className="dialog-notice">O período cria um compromisso em cada dia compatível, sempre no horário informado. Outros serviços podem ser incluídos no mesmo dia em horários diferentes.</div>}<TextArea label="Descrição e observações" value={form.description} onChange={(value) => update("description", value)} placeholder="Ex.: pintura da casa da cliente, etapa 1 de 3 meses, materiais e pendências." /></div>{error && <p className="dialog-error">{error}</p>}<footer><button className="secondary-button" type="button" onClick={onClose}>Cancelar</button><button className="primary-button" type="submit"><Check size={16} /> Agendar serviço</button></footer></form></section></div>;
 }
 
 const roleOptions = [{ value: "Proprietário", label: "Proprietário" }, { value: "Administrador", label: "Administrador" }, { value: "Financeiro", label: "Financeiro" }, { value: "Profissional", label: "Profissional" }, { value: "Auxiliar", label: "Auxiliar" }, { value: "Visualizador", label: "Visualizador" }];

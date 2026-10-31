@@ -38,7 +38,6 @@ const sectionCopy: Record<SectionId, { eyebrow: string; title: string; descripti
 type Status = "in_progress" | "waiting" | "completed" | "confirmed" | "pending" | "paid" | "open" | "overdue";
 type AgendaMode = "day" | "week" | "month";
 
-const AGENDA_HOURS = [...Array.from({ length: 17 }, (_, index) => `${String(index + 7).padStart(2, "0")}:00`), "00:00"];
 const AGENDA_START_MINUTES = 7 * 60;
 const AGENDA_END_MINUTES = 25 * 60;
 const AGENDA_HOUR_HEIGHT = 66;
@@ -377,7 +376,7 @@ type AgendaPointerHandler = (event: ReactPointerEvent<HTMLElement>) => void;
 
 function AgendaAppointmentCard({ appointment, onSelect, onOpenDetail, compact = false, style, onStartDrag, onStartResize }: { appointment: AppointmentRecord; onSelect: (appointment: AppointmentRecord) => void; onOpenDetail?: (appointmentId: string) => void; compact?: boolean; style?: CSSProperties; onStartDrag?: AgendaPointerHandler; onStartResize?: AgendaPointerHandler }) {
   return <div
-    className={`agenda-appointment-card ${compact ? "agenda-appointment-card-compact" : ""} ${onStartDrag ? "agenda-appointment-card-draggable" : ""}`}
+    className={`agenda-appointment-card agenda-tone-${professionalColor(appointment.professional)} ${compact ? "agenda-appointment-card-compact" : ""} ${onStartDrag ? "agenda-appointment-card-draggable" : ""}`}
     role="button"
     tabIndex={0}
     style={style}
@@ -412,6 +411,32 @@ function AgendaWeekView({ days, appointments, selectedDate, onSelectDate, onSele
   const [interaction, setInteraction] = useState<AgendaInteraction | null>(null);
   const columnRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const viewRef = useRef<HTMLDivElement>(null);
+  const [narrow, setNarrow] = useState(false);
+  const [zoom, setZoom] = useState<number | null>(null);
+  const [fullDay, setFullDay] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 760px)");
+    const sync = () => setNarrow(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
+  // Altura da hora menor no celular e faixa de horas que acompanha os compromissos (sem rolar até a meia-noite à toa).
+  const hourHeight = narrow ? 44 : AGENDA_HOUR_HEIGHT;
+  const level = days.length === 1 ? 3 : zoom ?? (narrow ? 0 : 2);
+  const axisWidth = narrow ? 36 : 56;
+  const inView = appointments.filter((item) => days.includes(item.date));
+  const earliest = inView.reduce((value, item) => Math.min(value, appointmentMinutes(item)), AGENDA_START_MINUTES);
+  const latest = inView.reduce((value, item) => Math.max(value, appointmentMinutes(item) + appointmentDurationMinutes(item)), 0);
+  const rangeStart = Math.floor(earliest / 60) * 60;
+  const rangeEnd = fullDay ? AGENDA_END_MINUTES : Math.min(AGENDA_END_MINUTES, Math.max(20 * 60, Math.ceil(latest / 60) * 60));
+  const hourRows = Array.from({ length: Math.max(1, Math.round((rangeEnd - rangeStart) / 60)) }, (_, index) => {
+    const hour = (rangeStart / 60 + index) % 24;
+    return narrow ? `${hour}h` : `${String(hour).padStart(2, "0")}:00`;
+  });
+  const columnWidths = ["minmax(0, 1fr)", "minmax(84px, 1fr)", "minmax(120px, 1fr)", "minmax(160px, 1fr)"];
 
   // No celular a semana é mais larga que a tela: leva o dia selecionado para a vista.
   useEffect(() => {
@@ -444,13 +469,13 @@ function AgendaWeekView({ days, appointments, selectedDate, onSelectDate, onSele
     setInteraction((current) => {
       if (!current || current.pointerId !== event.pointerId) return current;
       event.preventDefault();
-      const deltaMinutes = Math.round(((event.clientY - current.startY) * 60 / AGENDA_HOUR_HEIGHT) / AGENDA_SNAP_MINUTES) * AGENDA_SNAP_MINUTES;
+      const deltaMinutes = Math.round(((event.clientY - current.startY) * 60 / hourHeight) / AGENDA_SNAP_MINUTES) * AGENDA_SNAP_MINUTES;
       if (current.type === "resize") {
-        const maximumDuration = AGENDA_END_MINUTES - current.originMinutes;
+        const maximumDuration = rangeEnd - current.originMinutes;
         return { ...current, durationMinutes: clampAgendaMinutes(current.originDurationMinutes + deltaMinutes, AGENDA_SNAP_MINUTES, maximumDuration) };
       }
-      const maximumStart = AGENDA_END_MINUTES - current.originDurationMinutes;
-      return { ...current, date: findDateAtX(event.clientX, current.originDate), minutes: clampAgendaMinutes(current.originMinutes + deltaMinutes, AGENDA_START_MINUTES, maximumStart) };
+      const maximumStart = rangeEnd - current.originDurationMinutes;
+      return { ...current, date: findDateAtX(event.clientX, current.originDate), minutes: clampAgendaMinutes(current.originMinutes + deltaMinutes, rangeStart, maximumStart) };
     });
   }
 
@@ -466,25 +491,28 @@ function AgendaWeekView({ days, appointments, selectedDate, onSelectDate, onSele
     setInteraction(null);
   }
 
-  return <div ref={viewRef} className={`agenda-week-view ${days.length === 1 ? "agenda-week-view-single" : ""}`} onPointerMove={handlePointerMove} onPointerUp={finishInteraction} onPointerCancel={finishInteraction}><div className="agenda-week-grid"><div className="agenda-week-axis"><div className="agenda-week-axis-head">Horário</div>{AGENDA_HOURS.map((hour) => <div className="agenda-week-hour" key={hour}>{hour}</div>)}</div>{days.map((date) => {
+  return <div className="agenda-week-wrap"><div className="agenda-week-tools" role="group" aria-label="Ajustes da grade">
+    {days.length > 1 && <><button type="button" className="agenda-tool-button" onClick={() => setZoom(Math.max(0, level - 1))} disabled={level === 0} aria-label="Diminuir zoom">−</button><span className="agenda-tool-label">{level === 0 ? "Semana inteira" : `Zoom ${level}/3`}</span><button type="button" className="agenda-tool-button" onClick={() => setZoom(Math.min(3, level + 1))} disabled={level === 3} aria-label="Aumentar zoom">+</button></>}
+    <button type="button" className={`agenda-tool-toggle ${fullDay ? "agenda-tool-toggle-on" : ""}`} aria-pressed={fullDay} onClick={() => setFullDay((value) => !value)}>{fullDay ? "Mostrando até 00h" : `Mostrando ${rangeStart / 60}h–${rangeEnd / 60 === 25 ? "00" : rangeEnd / 60}h`}</button>
+  </div><div ref={viewRef} data-zoom={level} className={`agenda-week-view ${days.length === 1 ? "agenda-week-view-single" : ""}`} onPointerMove={handlePointerMove} onPointerUp={finishInteraction} onPointerCancel={finishInteraction}><div className="agenda-week-grid" style={{ gridTemplateColumns: `${axisWidth}px repeat(${days.length}, ${columnWidths[level]})`, minWidth: 0 }}><div className="agenda-week-axis"><div className="agenda-week-axis-head">{narrow ? "" : "Horário"}</div>{hourRows.map((hour) => <div className="agenda-week-hour" key={hour} style={{ height: hourHeight }}>{hour}</div>)}</div>{days.map((date) => {
     const dayAppointments = appointments.map((appointment) => {
       const active = interaction?.appointmentId === appointment.id ? interaction : undefined;
       return { appointment, date: active?.date ?? appointment.date, minutes: active?.minutes ?? appointmentMinutes(appointment), durationMinutes: active?.durationMinutes ?? appointmentDurationMinutes(appointment) };
     }).filter((item) => item.date === date).sort((a, b) => a.minutes - b.minutes);
     return <div className={`agenda-week-column ${date === selectedDate ? "agenda-week-column-active" : ""}`} key={date}>
       <button className="agenda-week-day" type="button" onClick={() => onSelectDate(date)}><span>{agendaShortWeekday(date)}</span><strong>{parseAgendaDate(date).getDate()}</strong><small>{dayAppointments.length} ag.</small></button>
-      <div className="agenda-week-column-body" ref={(node) => { columnRefs.current[date] = node; }} data-agenda-date={date}>
-        {AGENDA_HOURS.map((hour, index) => <div className="agenda-week-time-slot" key={hour} aria-label={`${agendaShortWeekday(date)} ${hour}`} style={{ top: `${index * AGENDA_HOUR_HEIGHT}px` }} />)}
-        {dayAppointments.map(({ appointment, minutes, durationMinutes }) => <AgendaAppointmentCard key={appointment.id} appointment={{ ...appointment, date, time: formatAgendaTime(minutes), duration: formatAgendaDuration(durationMinutes) }} onSelect={onSelect} onOpenDetail={onOpenDetail} compact style={{ top: `${(minutes - AGENDA_START_MINUTES) * AGENDA_HOUR_HEIGHT / 60 + 3}px`, height: `${Math.max(28, durationMinutes * AGENDA_HOUR_HEIGHT / 60 - 6)}px` }} onStartDrag={(event) => beginInteraction(event, appointment, "drag")} onStartResize={(event) => beginInteraction(event, appointment, "resize")} />)}
+      <div className="agenda-week-column-body" ref={(node) => { columnRefs.current[date] = node; }} data-agenda-date={date} style={{ height: hourRows.length * hourHeight }}>
+        {hourRows.map((hour, index) => <div className="agenda-week-time-slot" key={hour} aria-label={`${agendaShortWeekday(date)} ${hour}`} style={{ top: `${index * hourHeight}px`, height: hourHeight }} />)}
+        {dayAppointments.map(({ appointment, minutes, durationMinutes }) => <AgendaAppointmentCard key={appointment.id} appointment={{ ...appointment, date, time: formatAgendaTime(minutes), duration: formatAgendaDuration(durationMinutes) }} onSelect={onSelect} onOpenDetail={onOpenDetail} compact style={{ top: `${(minutes - rangeStart) * hourHeight / 60 + 2}px`, height: `${Math.max(20, durationMinutes * hourHeight / 60 - 4)}px` }} onStartDrag={(event) => beginInteraction(event, appointment, "drag")} onStartResize={(event) => beginInteraction(event, appointment, "resize")} />)}
       </div>
     </div>;
-  })}</div></div>;
+  })}</div></div></div>;
 }
 
 function AgendaMonthView({ date, appointments, selectedDate, onSelectDate }: { date: string; appointments: AppointmentRecord[]; selectedDate: string; onSelectDate: (date: string) => void }) {
   const monthDays = getAgendaMonthDays(date);
   const monthKey = date.slice(0, 7);
-  return <div className="agenda-month-view"><div className="agenda-weekday-row">{["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((day) => <span key={day}>{day}</span>)}</div><div className="agenda-month-grid">{monthDays.map((day) => { const dayAppointments = appointments.filter((appointment) => appointment.date === day).sort((a, b) => a.time.localeCompare(b.time)); const inMonth = day.slice(0, 7) === monthKey; return <button className={`agenda-month-cell ${inMonth ? "" : "agenda-month-cell-muted"} ${day === selectedDate ? "agenda-month-cell-active" : ""}`} key={day} type="button" onClick={() => onSelectDate(day)}><span className="agenda-month-number">{parseAgendaDate(day).getDate()}</span><span className="agenda-month-items">{dayAppointments.slice(0, 3).map((appointment) => <span className="agenda-month-item" key={appointment.id}><i className={`agenda-professional-dot agenda-professional-${professionalColor(appointment.professional)}`} /><b>{appointment.time}</b> {appointment.client}</span>)}{dayAppointments.length > 3 && <small>+{dayAppointments.length - 3} mais</small>}</span></button>; })}</div></div>;
+  return <div className="agenda-month-view"><div className="agenda-weekday-row">{["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((day) => <span key={day}>{day}</span>)}</div><div className="agenda-month-grid">{monthDays.map((day) => { const dayAppointments = appointments.filter((appointment) => appointment.date === day).sort((a, b) => a.time.localeCompare(b.time)); const inMonth = day.slice(0, 7) === monthKey; return <button className={`agenda-month-cell ${inMonth ? "" : "agenda-month-cell-muted"} ${day === selectedDate ? "agenda-month-cell-active" : ""}`} key={day} type="button" onClick={() => onSelectDate(day)}><span className="agenda-month-number">{parseAgendaDate(day).getDate()}</span><span className="agenda-month-items">{dayAppointments.slice(0, 3).map((appointment) => <span className={`agenda-month-item agenda-tone-${professionalColor(appointment.professional)}`} key={appointment.id}><i className={`agenda-professional-dot agenda-professional-${professionalColor(appointment.professional)}`} /><b>{appointment.time}</b> {appointment.client}</span>)}{dayAppointments.length > 3 && <small>+{dayAppointments.length - 3} mais</small>}</span></button>; })}</div></div>;
 }
 
 const AGENDA_STATUS_OPTIONS: Array<{ value: AppointmentRecord["status"]; label: string }> = [
@@ -519,9 +547,11 @@ function AgendaDetails(props: AgendaDetailsProps) {
 
 function AgendaDetailsBody({ appointment, client, conflicts, onOpen, onOpenDetail, onUpdate, onRemove }: Omit<AgendaDetailsProps, "appointment"> & { appointment: AppointmentRecord }) {
   const data = useDemoData();
+  const series = appointment.seriesId ? data.appointments.filter((item) => item.seriesId === appointment.seriesId).sort((a, b) => a.date.localeCompare(b.date)) : [];
+  const seriesIndex = series.findIndex((item) => item.id === appointment.id);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
-  const [draft, setDraft] = useState({ date: appointment.date, time: appointment.time, duration: appointment.duration, professional: appointment.professional, notes: appointment.notes });
+  const [draft, setDraft] = useState({ date: appointment.date, time: appointment.time, duration: appointment.duration, professional: appointment.professional, notes: appointment.notes, applyAll: false });
 
   function save() {
     const professional = draft.professional.trim();
@@ -533,8 +563,13 @@ function AgendaDetailsBody({ appointment, client, conflicts, onOpen, onOpenDetai
     if (clashes.length && !window.confirm(`${professional} já tem compromisso nesse horário (${clashes[0].client}, ${clashes[0].time}). Salvar mesmo assim?`)) return;
     const single = !appointment.cadence || appointment.cadence === "single";
     onUpdate(appointment.id, { date: draft.date, time: draft.time, duration: draft.duration.trim(), professional, notes: draft.notes, ...(single ? { endDate: draft.date } : {}) });
+    if (draft.applyAll) series.filter((item) => item.id !== appointment.id).forEach((item) => onUpdate(item.id, { time: draft.time, duration: draft.duration.trim(), professional }));
     setError("");
     setEditing(false);
+  }
+
+  function removeSeries() {
+    if (window.confirm(`Remover os ${series.length} dias deste serviço de ${appointment.client}? Esta ação não pode ser desfeita.`)) series.forEach((item) => onRemove(item.id));
   }
 
   function remove() {
@@ -552,14 +587,14 @@ function AgendaDetailsBody({ appointment, client, conflicts, onOpen, onOpenDetai
         <label className="field-wrap">Duração<input value={draft.duration} placeholder="1h 30" onChange={(event) => setDraft((previous) => ({ ...previous, duration: event.target.value }))} /></label>
         <label className="field-wrap">Responsável<input value={draft.professional} onChange={(event) => setDraft((previous) => ({ ...previous, professional: event.target.value }))} /></label>
       </div>
-      {isValidAgendaTime(draft.time) && isValidAgendaDuration(draft.duration) && <p className="agenda-edit-hint">Termina às {endTime({ time: draft.time, duration: draft.duration })}</p>}
+      {series.length > 1 && <label className="agenda-apply-all"><input type="checkbox" checked={draft.applyAll} onChange={(event) => setDraft((previous) => ({ ...previous, applyAll: event.target.checked }))} />Aplicar horário, duração e responsável aos {series.length} dias</label>}{isValidAgendaTime(draft.time) && isValidAgendaDuration(draft.duration) && <p className="agenda-edit-hint">Termina às {endTime({ time: draft.time, duration: draft.duration })}</p>}
       <label className="field-wrap"><span className="field-label-row"><span>Observações</span><VoiceDictationButton value={draft.notes} onChange={(text) => setDraft((previous) => ({ ...previous, notes: text }))} /></span><textarea rows={3} value={draft.notes} onChange={(event) => setDraft((previous) => ({ ...previous, notes: event.target.value }))} /></label>
       {error && <p className="agenda-edit-error" role="alert">{error}</p>}
       <div className="agenda-detail-actions"><button className="secondary-button" type="button" onClick={() => { setEditing(false); setError(""); }}>Cancelar</button><button className="primary-button" type="button" onClick={save}>Salvar alterações</button></div>
     </div> : <>
-      <div className="agenda-detail-list"><div><CalendarDays size={15} /><span><small>Data</small><strong>{agendaLongDateLabel(appointment.date)}</strong></span></div>{appointment.endDate && appointment.endDate !== appointment.date && <div><CalendarDays size={15} /><span><small>Período reservado</small><strong>Até {agendaLongDateLabel(appointment.endDate)} · {appointmentCadenceLabel(appointment.cadence)}</strong></span></div>}<div><Clock3 size={15} /><span><small>Horário e duração</small><strong>{timeRange(appointment)} · {appointment.duration}</strong></span></div><div><Users size={15} /><span><small>Responsável</small><strong>{appointment.professional}</strong></span></div><div><MapPin size={15} /><span><small>Local</small><strong>{appointment.address}</strong></span></div>{client?.phone && <div><MessageCircle size={15} /><span><small>Contato rápido</small><WhatsAppLink phone={client.phone} label="Enviar lembrete pelo WhatsApp" message={`Olá, ${client.name}! Confirmando o serviço de ${appointment.service} em ${agendaLongDateLabel(appointment.date)} às ${appointment.time}.`} /></span></div>}</div>
+      <div className="agenda-detail-list"><div><CalendarDays size={15} /><span><small>Data</small><strong>{agendaLongDateLabel(appointment.date)}</strong></span></div>{series.length > 1 ? <div><CalendarDays size={15} /><span><small>Serviço de vários dias</small><strong>Dia {seriesIndex + 1} de {series.length} · {series[0].date.split("-").reverse().slice(0, 2).join("/")} a {series[series.length - 1].date.split("-").reverse().slice(0, 2).join("/")} · {appointmentCadenceLabel(appointment.cadence)}</strong></span></div> : appointment.endDate && appointment.endDate !== appointment.date && <div><CalendarDays size={15} /><span><small>Período reservado</small><strong>Até {agendaLongDateLabel(appointment.endDate)} · {appointmentCadenceLabel(appointment.cadence)}</strong></span></div>}<div><Clock3 size={15} /><span><small>Horário e duração</small><strong>{timeRange(appointment)} · {appointment.duration}</strong></span></div><div><Users size={15} /><span><small>Responsável</small><strong>{appointment.professional}</strong></span></div><div><MapPin size={15} /><span><small>Local</small><strong>{appointment.address}</strong></span></div>{client?.phone && <div><MessageCircle size={15} /><span><small>Contato rápido</small><WhatsAppLink phone={client.phone} label="Enviar lembrete pelo WhatsApp" message={`Olá, ${client.name}! Confirmando o serviço de ${appointment.service} em ${agendaLongDateLabel(appointment.date)} às ${appointment.time}.`} /></span></div>}</div>
       {appointment.notes && <div className="agenda-notes"><small>Observações</small><p>{appointment.notes}</p></div>}
-      <div className="agenda-detail-actions"><button className="primary-button" type="button" onClick={() => onOpenDetail(appointment.id)}>Ver ordem e dados do cliente</button><button className="secondary-button" type="button" onClick={() => setEditing(true)}>Editar compromisso</button>{appointment.workOrderId && <button className="secondary-button" type="button" onClick={() => onOpen("diary", appointment.workOrderId)}>Abrir diário da OS</button>}<button className="table-action" type="button" onClick={remove}>Remover</button></div>
+      <div className="agenda-detail-actions"><button className="primary-button" type="button" onClick={() => onOpenDetail(appointment.id)}>Ver ordem e dados do cliente</button><button className="secondary-button" type="button" onClick={() => setEditing(true)}>Editar compromisso</button>{appointment.workOrderId && <button className="secondary-button" type="button" onClick={() => onOpen("diary", appointment.workOrderId)}>Abrir diário da OS</button>}<button className="table-action" type="button" onClick={remove}>Remover este dia</button>{series.length > 1 && <button className="table-action" type="button" onClick={removeSeries}>Remover todos os {series.length} dias</button>}</div>
     </>}
   </aside>;
 }

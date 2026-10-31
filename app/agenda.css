@@ -299,3 +299,48 @@
   .notification-popover { position: fixed; top: 64px; left: 12px; right: 12px; width: auto; }
   .finance-actions { width: 100%; margin-left: 44px; justify-content: flex-start; }
 }
+
+/* Cores por funcionário */
+.agenda-appointment-card.agenda-tone-mint { border-color: #bfe3cd; border-left: 4px solid #4fac78; background: #f0faf4; }
+.agenda-appointment-card.agenda-tone-blue { border-color: #c5daee; border-left: 4px solid #6e9cc7; background: #f0f6fc; }
+.agenda-appointment-card.agenda-tone-violet { border-color: #d6cbea; border-left: 4px solid #9279c4; background: #f5f2fb; }
+.agenda-appointment-card.agenda-tone-amber { border-color: #efd9b4; border-left: 4px solid #d59c4c; background: #fdf7ec; }
+.agenda-appointment-card.agenda-tone-rose { border-color: #ecc9d1; border-left: 4px solid #c77d8c; background: #fcf3f5; }
+.agenda-month-item.agenda-tone-mint { color: #2d6b49; background: #e6f6ec; }
+.agenda-month-item.agenda-tone-blue { color: #3d6288; background: #e8f1fa; }
+.agenda-month-item.agenda-tone-violet { color: #5d4a90; background: #efeafa; }
+.agenda-month-item.agenda-tone-amber { color: #8a5f1e; background: #fbf0dc; }
+.agenda-month-item.agenda-tone-rose { color: #8e4756; background: #fae9ed; }
+
+/* Barra de ajustes da grade (zoom e faixa de horas) */
+.agenda-week-wrap { display: grid; gap: 8px; }
+.agenda-week-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.agenda-tool-button { width: 34px; height: 34px; border: 1px solid #d5e4da; border-radius: 8px; color: #2d7653; background: #fff; font-size: 18px; font-weight: 700; line-height: 1; cursor: pointer; }
+.agenda-tool-button:disabled { opacity: .4; cursor: default; }
+.agenda-tool-label { min-width: 84px; color: #6c8576; font-size: 12px; font-weight: 700; text-align: center; }
+.agenda-tool-toggle { margin-left: auto; border: 1px solid #d5e4da; border-radius: 999px; padding: 7px 12px; color: #4b6a58; background: #fff; font-size: 12px; font-weight: 700; cursor: pointer; }
+.agenda-tool-toggle-on { border-color: #9fceb0; background: #f2faf5; }
+.agenda-period-hint { margin: -4px 0 4px; color: #4b7a60; font-size: 12px; line-height: 1.4; }
+.agenda-apply-all { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: #4b5d6f; font-size: 13px; }
+.agenda-apply-all input { width: 18px; height: 18px; }
+
+/* Semana inteira no celular: 7 colunas na largura da tela */
+.agenda-week-view[data-zoom="0"] .agenda-week-axis-head { padding: 0; }
+.agenda-week-view[data-zoom="0"] .agenda-week-hour { padding: 4px 2px; font-size: 10px; }
+.agenda-week-view[data-zoom="0"] .agenda-week-day { padding: 8px 2px 6px; min-height: 48px; }
+.agenda-week-view[data-zoom="0"] .agenda-week-day span { font-size: 9px; }
+.agenda-week-view[data-zoom="0"] .agenda-week-day strong { font-size: 15px; }
+.agenda-week-view[data-zoom="0"] .agenda-week-day small { display: none; }
+.agenda-week-view[data-zoom="0"] .agenda-week-column-body .agenda-appointment-card { left: 1px; right: 1px; width: calc(100% - 2px); }
+.agenda-week-view[data-zoom="0"] .agenda-week-column-body .agenda-appointment-card-compact { padding: 3px 3px 14px; border-left-width: 3px; }
+.agenda-week-view[data-zoom="0"] .agenda-card-time, .agenda-week-view[data-zoom="0"] .agenda-card-copy > span, .agenda-week-view[data-zoom="0"] .agenda-card-copy small, .agenda-week-view[data-zoom="0"] .agenda-appointment-card .status-pill { display: none; }
+.agenda-week-view[data-zoom="0"] .agenda-week-column-body .agenda-appointment-card-compact .agenda-card-copy strong { display: block; overflow: hidden; font-size: 9px; line-height: 1.15; white-space: normal; word-break: break-word; }
+.agenda-week-view[data-zoom="1"] .agenda-card-copy > span, .agenda-week-view[data-zoom="1"] .agenda-appointment-card .status-pill { display: none; }
+.agenda-week-view[data-zoom="1"] .agenda-week-column-body .agenda-appointment-card-compact .agenda-card-time { font-size: 9px; }
+.agenda-week-view[data-zoom="1"] .agenda-week-column-body .agenda-appointment-card-compact .agenda-card-copy strong { font-size: 10px; }
+.agenda-week-column-body .agenda-appointment-card { touch-action: pan-x pan-y pinch-zoom; }
+@media (max-width: 760px) {
+  .agenda-week-view { scroll-padding-left: 36px; }
+  .agenda-tool-toggle { font-size: 11px; padding: 6px 10px; }
+  .agenda-week-column-body .agenda-appointment-card-compact .agenda-card-time { font-size: 10px; }
+}
