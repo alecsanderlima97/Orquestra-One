@@ -1,4 +1,5 @@
 import { getApp, getApps, initializeApp, type FirebaseOptions } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
 import { getAuth, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect } from "firebase/auth";
 
 const config: FirebaseOptions = {
@@ -65,4 +66,16 @@ export async function getCurrentFirebaseUserToken() {
   const app = getFirebaseApp();
   const user = getAuth(app).currentUser;
   return user ? user.getIdToken() : null;
+}
+
+export function getFirestoreDb() {
+  return getFirestore(getFirebaseApp());
+}
+
+/** Espera o Firebase restaurar o login do navegador (null = ninguém entrou). */
+export function waitForFirebaseUser() {
+  const auth = getAuth(getFirebaseApp());
+  return new Promise<import("firebase/auth").User | null>((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => { unsubscribe(); resolve(user); });
+  });
 }

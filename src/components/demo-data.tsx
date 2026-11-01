@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { collection, deleteDoc, doc, onSnapshot, setDoc, type Unsubscribe } from "firebase/firestore";
+import { getFirestoreDb, waitForFirebaseUser } from "@/src/lib/firebase-client";
 import { accessSummary } from "@/src/lib/roles";
 import { appointments, clients, financeItems, stockItems, suppliers, teamMembers, workOrders } from "@/src/domain/mock-data";
 
@@ -120,7 +122,26 @@ function buildInitialState(): DemoState {
   };
 }
 
-const DemoDataContext = createContext<(DemoState & DemoActions) | null>(null);
+export type SyncStatus = "demo" | "connecting" | "online" | "error";
+type SyncInfo = { syncStatus: SyncStatus; tenantId: string | null; connectTenant: (tenantId: string) => void };
+
+/** Cada empresa começa vazia; o que aparece vem só do Firestore dela. */
+function emptyState(): DemoState {
+  return { clients: [], suppliers: [], appointments: [], workOrders: [], finance: [], stock: [], team: [], invitations: [], stockMovements: [] };
+}
+
+const SYNC_KEYS = ["clients", "suppliers", "appointments", "workOrders", "finance", "stock", "team", "stockMovements"] as const;
+
+function canon(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canon).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined).sort(([a], [b]) => (a < b ? -1 : 1));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canon(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+const DemoDataContext = createContext<(DemoState & DemoActions & SyncInfo) | null>(null);
 
 function initials(name: string) {
   return name.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase() || "ON";
@@ -133,8 +154,92 @@ function id(prefix: string) {
 export function DemoDataProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<DemoState>(buildInitialState);
   const [hydrated, setHydrated] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("demo");
+  const [tenantId, setTenantId] = useState<string | null>(null);
+  const tenantRef = useRef<string | null>(null);
+  const unsubsRef = useRef<Unsubscribe[]>([]);
+  const syncedRef = useRef<Record<string, Map<string, string>>>({});
+  const ordRef = useRef<Map<string, number>>(new Map());
+  const ordSeq = useRef(0);
+
+  const connectTenant = useCallback((nextTenant: string) => {
+    if (tenantRef.current === nextTenant) return;
+    unsubsRef.current.forEach((stop) => stop());
+    unsubsRef.current = [];
+    syncedRef.current = {};
+    ordRef.current = new Map();
+    tenantRef.current = nextTenant;
+    setTenantId(nextTenant);
+    setState(emptyState());
+    setSyncStatus("connecting");
+    void (async () => {
+      try {
+        const user = await waitForFirebaseUser();
+        if (!user || tenantRef.current !== nextTenant) { if (!user) setSyncStatus("error"); return; }
+        const db = getFirestoreDb();
+        let loaded = 0;
+        for (const key of SYNC_KEYS) {
+          let first = true;
+          const stop = onSnapshot(collection(db, `companies/${nextTenant}/${key}`), (snapshot) => {
+            const map = new Map<string, string>();
+            const rows: Array<[number, Record<string, unknown>]> = [];
+            snapshot.forEach((entry) => {
+              const data = entry.data() as Record<string, unknown>;
+              const ord = typeof data._ord === "number" ? data._ord : 0;
+              delete data._ord;
+              const record = { ...data, id: entry.id };
+              ordRef.current.set(`${key}/${entry.id}`, ord);
+              map.set(entry.id, canon(JSON.parse(JSON.stringify(record))));
+              rows.push([ord, record]);
+            });
+            rows.sort((a, b) => b[0] - a[0]);
+            syncedRef.current[key] = map;
+            setState((previous) => ({ ...previous, [key]: rows.map((row) => row[1]) }));
+            if (first) { first = false; loaded += 1; if (loaded === SYNC_KEYS.length) setSyncStatus("online"); }
+          }, () => setSyncStatus("error"));
+          unsubsRef.current.push(stop);
+        }
+      } catch {
+        setSyncStatus("error");
+      }
+    })();
+  }, []);
+
+  useEffect(() => () => unsubsRef.current.forEach((stop) => stop()), []);
+
+  // Envia ao Firestore só o que mudou localmente (diferença contra o último estado sincronizado).
+  useEffect(() => {
+    const tenant = tenantRef.current;
+    if (!tenant) return;
+    let db;
+    try { db = getFirestoreDb(); } catch { return; }
+    for (const key of SYNC_KEYS) {
+      const synced = syncedRef.current[key];
+      if (!synced) continue;
+      const list = state[key] as unknown as Array<{ id: string }>;
+      const seen = new Set<string>();
+      for (const record of [...list].reverse()) {
+        seen.add(record.id);
+        const clean = JSON.parse(JSON.stringify(record)) as Record<string, unknown>;
+        const signature = canon(clean);
+        if (synced.get(record.id) === signature) continue;
+        synced.set(record.id, signature);
+        const ordKey = `${key}/${record.id}`;
+        let ord = ordRef.current.get(ordKey);
+        if (!ord) { ord = Date.now() * 1000 + (ordSeq.current++ % 1000); ordRef.current.set(ordKey, ord); }
+        setDoc(doc(db, `companies/${tenant}/${key}`, record.id), { ...clean, _ord: ord }).catch(() => setSyncStatus("error"));
+      }
+      for (const existing of [...synced.keys()]) {
+        if (seen.has(existing)) continue;
+        synced.delete(existing);
+        ordRef.current.delete(`${key}/${existing}`);
+        deleteDoc(doc(db, `companies/${tenant}/${key}`, existing)).catch(() => setSyncStatus("error"));
+      }
+    }
+  }, [state]);
 
   useEffect(() => {
+    if (tenantRef.current) { setHydrated(true); return; }
     try {
       const saved = window.localStorage.getItem(storageKey);
       if (saved) setState((current) => ({ ...current, ...(JSON.parse(saved) as Partial<DemoState>) }));
@@ -146,11 +251,14 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (hydrated) window.localStorage.setItem(storageKey, JSON.stringify(state));
+    if (hydrated && !tenantRef.current) window.localStorage.setItem(storageKey, JSON.stringify(state));
   }, [state, hydrated]);
 
-  const value = useMemo<DemoState & DemoActions>(() => ({
+  const value = useMemo<DemoState & DemoActions & SyncInfo>(() => ({
     ...state,
+    syncStatus,
+    tenantId,
+    connectTenant,
     addClient: (record) => setState((previous) => ({ ...previous, clients: [{ ...record, id: id("cl"), detail: "Novo cadastro", initials: initials(record.name), tone: tones[previous.clients.length % tones.length], history: ["Cadastro criado agora"] }, ...previous.clients] })),
     addSupplier: (record) => setState((previous) => ({ ...previous, suppliers: [{ ...record, id: id("fo"), initials: initials(record.name), tone: tones[previous.suppliers.length % tones.length] }, ...previous.suppliers] })),
     addAppointment: (record) => setState((previous) => ({ ...previous, appointments: [{ ...record, id: id("ag"), status: "pending" }, ...previous.appointments] })),
@@ -158,7 +266,7 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
     updateAppointment: (appointmentId, patch) => setState((previous) => ({ ...previous, appointments: previous.appointments.map((appointment) => appointment.id === appointmentId ? { ...appointment, ...patch } : appointment) })),
     removeAppointment: (appointmentId) => setState((previous) => ({ ...previous, appointments: previous.appointments.filter((appointment) => appointment.id !== appointmentId) })),
     addWorkOrder: (record) => {
-      const nextId = `OS-${String(129 + state.workOrders.length).padStart(5, "0")}`;
+      const nextId = `OS-${String(Math.max(128, ...state.workOrders.map((order) => Number(order.id.replace(/\D/g, "")) || 0)) + 1).padStart(5, "0")}`;
       setState((previous) => ({ ...previous, workOrders: [{ ...record, id: nextId, status: "in_progress", updatedAt: "Criada agora", descriptionHistory: [{ id: id("desc"), text: record.description, createdAt: "Descrição inicial" }], diary: [], materialLines: record.materialLines ?? [] }, ...previous.workOrders] }));
       return nextId;
     },
@@ -263,7 +371,7 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
         team: already ? previous.team : [{ id: id("tm"), name, email: invite.email, role: invite.role, access: accessSummary(invite.role), active: true, initials: initials(name), tone: tones[previous.team.length % tones.length] }, ...previous.team],
       };
     }),
-  }), [state]);
+  }), [state, syncStatus, tenantId, connectTenant]);
 
   return <DemoDataContext.Provider value={value}>{children}</DemoDataContext.Provider>;
 }

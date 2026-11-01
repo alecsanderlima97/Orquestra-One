@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFirebaseAdminServices } from "@/src/lib/firebase-admin";
+import { accessSummary } from "@/src/lib/roles";
 
 export const runtime = "nodejs";
 
@@ -79,6 +80,14 @@ export async function POST(request: NextRequest) {
         if (freshInvitation.data()?.status !== "pending") throw new Error("INVITATION_ALREADY_CLAIMED");
         transaction.set(userRef, { name: identity.name ?? email, email, role, tenantId, active: true, invitationId: invitationDocument.id, createdAt: new Date(), updatedAt: new Date() }, { merge: true });
         transaction.update(invitationDocument.ref, { status: "accepted", claimedBy: identity.uid, claimedAt: new Date() });
+        const uiRole = invitation.kind === "owner" ? "Proprietário" : String(invitation.role ?? "Visualizador");
+        const memberName = identity.name ?? email;
+        const memberId = `tm-${identity.uid}`;
+        transaction.set(services.firestore.doc(`companies/${tenantId}/team/${memberId}`), {
+          id: memberId, name: memberName, email, role: uiRole, access: accessSummary(uiRole), active: true,
+          initials: memberName.split(" ").filter(Boolean).map((part: string) => part[0]).slice(0, 2).join("").toUpperCase() || "ON",
+          tone: "mint", _ord: Date.now() * 1000,
+        });
       });
       }
     } else if (!platformRoles.has(role ?? "")) {
