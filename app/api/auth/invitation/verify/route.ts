@@ -42,6 +42,13 @@ export async function POST(request: NextRequest) {
     if (!profile || profile.active !== true) {
       const email = identity.email?.trim().toLowerCase();
       if (!email) return NextResponse.json({ error: "A conta Google não possui um e-mail válido." }, { status: 403 });
+      const ownerEmail = process.env.PLATFORM_OWNER_EMAIL?.trim().toLowerCase();
+      if (ownerEmail && email === ownerEmail && identity.email_verified !== false) {
+        stage = "bootstrap_platform_owner";
+        await userRef.set({ name: identity.name ?? email, email, role: "platform_owner", active: true, createdAt: new Date(), updatedAt: new Date() }, { merge: true });
+        role = "platform_owner";
+        tenantId = undefined;
+      } else {
       stage = "read_invitation";
       const invitations = await services.firestore.collection("invitations")
         .where("email", "==", email)
@@ -73,12 +80,13 @@ export async function POST(request: NextRequest) {
         transaction.set(userRef, { name: identity.name ?? email, email, role, tenantId, active: true, invitationId: invitationDocument.id, createdAt: new Date(), updatedAt: new Date() }, { merge: true });
         transaction.update(invitationDocument.ref, { status: "accepted", claimedBy: identity.uid, claimedAt: new Date() });
       });
+      }
     } else if (!platformRoles.has(role ?? "")) {
       if (!tenantId) return NextResponse.json({ error: "O usuário não está vinculado a uma empresa." }, { status: 403 });
       stage = "read_company";
       const companySnapshot = await services.firestore.doc(`companies/${tenantId}`).get();
       if (!companySnapshot.exists || companySnapshot.data()?.status === "bloqueado") {
-        return NextResponse.json({ error: "A empresa está bloqueada no Portal Orquestra.cs." }, { status: 403 });
+        return NextResponse.json({ error: "A empresa está bloqueada. Fale com o suporte do Orquestra One." }, { status: 403 });
       }
     }
 
