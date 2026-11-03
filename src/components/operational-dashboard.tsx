@@ -6,6 +6,7 @@ import {
   CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, ClipboardList, Clock3, FileBarChart,
   FilePlus2, LayoutDashboard, MapPin, Menu, PackageCheck, Plus, Search, Settings2,
   MessageCircle, ShieldCheck, Sparkles, UserCog, Users, WalletCards, Wrench, X, type LucideIcon,
+  FileText,
 } from "lucide-react";
 import { formatBRL } from "@/src/domain/money";
 import type { SectionId } from "@/src/domain/types";
@@ -14,6 +15,7 @@ import { RecordDialog, type RecordKind } from "@/src/components/record-dialog";
 import { VoiceDictationButton } from "@/src/components/voice-input";
 import { EmptyState, PanelHeader, StatusPill, WhatsAppLink, type Status } from "@/src/components/ui-parts";
 import { OrdersView } from "@/src/components/orders-view";
+import { QuotesView } from "@/src/components/quotes-view";
 import { FinanceView } from "@/src/components/finance-view";
 import { StockView } from "@/src/components/stock-view";
 import { ClientsView, SuppliersView } from "@/src/components/people-views";
@@ -24,7 +26,7 @@ import { endTime, findConflicts, lengthMinutes, startMinutes, timeRange, todayDa
 
 const navigation: Array<{ id: Exclude<SectionId, "settings">; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Visão geral", icon: LayoutDashboard }, { id: "agenda", label: "Agenda", icon: CalendarDays },
-  { id: "orders", label: "Ordens de serviço", icon: ClipboardList }, { id: "finance", label: "Financeiro", icon: WalletCards },
+  { id: "quotes", label: "Orçamentos", icon: FileText }, { id: "orders", label: "Ordens de serviço", icon: ClipboardList }, { id: "finance", label: "Financeiro", icon: WalletCards },
   { id: "stock", label: "Estoque e ferramentas", icon: Boxes }, { id: "clients", label: "Clientes", icon: Users },
   { id: "suppliers", label: "Fornecedores", icon: Building2 }, { id: "reports", label: "Relatórios", icon: FileBarChart },
   { id: "team", label: "Equipe", icon: UserCog },
@@ -33,6 +35,7 @@ const navigation: Array<{ id: Exclude<SectionId, "settings">; label: string; ico
 const sectionCopy: Record<SectionId, { eyebrow: string; title: string; description: string }> = {
   overview: { eyebrow: "Operação de hoje", title: "Bom dia, Alecsander", description: "Agenda, serviços e financeiro conectados para uma rotina mais leve." },
   agenda: { eyebrow: "Agenda de serviços", title: "O dia no seu ritmo", description: "Agendamentos já trazem cliente, endereço e contexto para a ordem de serviço." },
+  quotes: { eyebrow: "Vendas", title: "Orçamentos", description: "Monte, envie pelo WhatsApp e transforme em ordem de serviço quando o cliente aprovar." },
   orders: { eyebrow: "Operação", title: "Ordens de serviço", description: "Registre a execução, materiais e fechamento no mesmo fluxo." },
   finance: { eyebrow: "Controle financeiro", title: "Dinheiro com contexto", description: "Receitas, despesas e fechamentos vinculados aos serviços." },
   stock: { eyebrow: "Materiais e ferramentas", title: "Seu estoque sob controle", description: "A baixa é feita apenas no fechamento confirmado da OS." },
@@ -186,7 +189,7 @@ export function OperationalDashboard() {
       <div className="page-wrap"><div className="page-heading"><div><p className="eyebrow">{copy.eyebrow}</p><h1>{copy.title}</h1><p className="page-description">{copy.description}</p></div><div className="heading-actions"><button className="secondary-button" type="button" onClick={() => navigate("agenda")}><CalendarClock size={17} /> Hoje</button><button className="primary-button" type="button" onClick={() => setQuickOpen((value) => !value)}><Plus size={18} /> Novo registro</button></div></div>
       {quickOpen && <QuickActions onOpen={open} onClose={() => setQuickOpen(false)} />}
       {activeSection === "overview" && <Overview onNavigate={navigate} onOpen={open} />}
-      {activeSection === "agenda" && <AgendaView onOpen={open} onCreateOrder={createOrderFromAppointment} onCreateAt={createAppointmentAt} />}{activeSection === "orders" && <OrdersView onOpen={open} />}{activeSection === "finance" && <FinanceView onOpen={open} />}{activeSection === "stock" && <StockView onOpen={open} />}{activeSection === "clients" && <ClientsView onOpen={open} />}{activeSection === "suppliers" && <SuppliersView onOpen={open} />}{activeSection === "reports" && <ReportsView />}{activeSection === "team" && <TeamView />}{activeSection === "settings" && <SettingsView />}
+      {activeSection === "agenda" && <AgendaView onOpen={open} onCreateOrder={createOrderFromAppointment} onCreateAt={createAppointmentAt} />}{activeSection === "quotes" && <QuotesView onGoToOrders={() => navigate("orders")} />}{activeSection === "orders" && <OrdersView onOpen={open} />}{activeSection === "finance" && <FinanceView onOpen={open} />}{activeSection === "stock" && <StockView onOpen={open} />}{activeSection === "clients" && <ClientsView onOpen={open} />}{activeSection === "suppliers" && <SuppliersView onOpen={open} />}{activeSection === "reports" && <ReportsView />}{activeSection === "team" && <TeamView />}{activeSection === "settings" && <SettingsView />}
       </div></main>
     <nav className="mobile-nav" aria-label="Navegação mobile">{navigation.slice(0, 5).map(({ id, label, icon: Icon }) => <button key={id} type="button" className={activeSection === id ? "mobile-nav-active" : ""} onClick={() => navigate(id)}><Icon size={19} /><span>{label.split(" ")[0]}</span></button>)}</nav>
     {dialog && <RecordDialog kind={dialog} workOrderId={workOrderId} prefill={dialog === "order" ? orderLink : dialog === "appointment" ? slotPrefill : undefined} onOrderCreated={dialog === "order" && orderLink ? (orderId) => data.updateAppointment(orderLink.appointmentId, { workOrderId: orderId }) : undefined} onClose={() => { setDialog(null); setOrderLink(undefined); setSlotPrefill(undefined); }} />}

@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { collection, deleteDoc, doc, onSnapshot, setDoc, type Unsubscribe } from "firebase/firestore";
 import { getFirestoreDb, waitForFirebaseUser } from "@/src/lib/firebase-client";
 import { accessSummary } from "@/src/lib/roles";
+import { itemsAsDescription, quoteTotal, type QuoteRecord } from "@/src/lib/quotes";
 import { appointments, clients, financeItems, stockItems, suppliers, teamMembers, workOrders } from "@/src/domain/mock-data";
 
 export type ClientRecord = {
@@ -47,6 +48,7 @@ export type FinanceRecord = (typeof financeItems)[number] & { originId?: string;
 export type StockRecord = (typeof stockItems)[number] & { costCents: number };
 export type TeamRecord = (typeof teamMembers)[number] & { email: string; active?: boolean };
 export type StockMovement = { id: string; stockId: string; delta: number; reason: string; createdAt: string };
+export type { QuoteRecord };
 export type InvitationRecord = { id: string; email: string; role: string; kind: "owner" | "team"; status: "pending" | "accepted" | "expired" | "revoked"; createdAt: string; expiresAt: string };
 
 type DemoState = {
@@ -59,6 +61,7 @@ type DemoState = {
   team: TeamRecord[];
   invitations: InvitationRecord[];
   stockMovements: StockMovement[];
+  quotes: QuoteRecord[];
 };
 
 type DemoActions = {
@@ -97,6 +100,11 @@ type DemoActions = {
   resendInvite: (inviteId: string) => void;
   revokeInvite: (inviteId: string) => void;
   acceptInvite: (inviteId: string) => void;
+  addQuote: (record: Omit<QuoteRecord, "id" | "status" | "createdAt" | "workOrderId">) => string;
+  updateQuote: (quoteId: string, patch: Partial<Omit<QuoteRecord, "id" | "workOrderId" | "status">>) => void;
+  removeQuote: (quoteId: string) => void;
+  setQuoteStatus: (quoteId: string, status: "draft" | "sent" | "rejected") => void;
+  approveQuote: (quoteId: string) => string | undefined;
 };
 
 const storageKey = "orquestra-one-demo-v5";
@@ -116,6 +124,7 @@ function buildInitialState(): DemoState {
     stock: stockItems.map((item, index) => ({ ...item, costCents: [1290, 890, 35990, 2790][index] ?? 0 })),
     team: teamMembers.map((member) => ({ ...member, email: `${member.name.toLowerCase().replace(/\s+/g, ".")}@empresaexemplo.com` })),
     stockMovements: [],
+    quotes: [],
     invitations: [
       { id: "invite-1", email: "rafael.lima@empresaexemplo.com", role: "Profissional", kind: "team", status: "pending", createdAt: "Hoje, 09:10", expiresAt: "05 nov 2026" },
     ],
@@ -127,10 +136,10 @@ type SyncInfo = { syncStatus: SyncStatus; tenantId: string | null; connectTenant
 
 /** Cada empresa começa vazia; o que aparece vem só do Firestore dela. */
 function emptyState(): DemoState {
-  return { clients: [], suppliers: [], appointments: [], workOrders: [], finance: [], stock: [], team: [], invitations: [], stockMovements: [] };
+  return { clients: [], suppliers: [], appointments: [], workOrders: [], finance: [], stock: [], team: [], invitations: [], stockMovements: [], quotes: [] };
 }
 
-const SYNC_KEYS = ["clients", "suppliers", "appointments", "workOrders", "finance", "stock", "team", "stockMovements"] as const;
+const SYNC_KEYS = ["clients", "suppliers", "appointments", "workOrders", "finance", "stock", "team", "stockMovements", "quotes"] as const;
 
 function canon(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canon).join(",")}]`;
@@ -360,6 +369,28 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
     removeTeamMember: (memberId) => setState((previous) => ({ ...previous, team: previous.team.filter((member) => member.id !== memberId || member.role === "Proprietário") })),
     resendInvite: (inviteId) => setState((previous) => ({ ...previous, invitations: previous.invitations.map((invite) => invite.id === inviteId ? { ...invite, status: "pending", createdAt: "Reenviado agora", expiresAt: "Em 7 dias" } : invite) })),
     revokeInvite: (inviteId) => setState((previous) => ({ ...previous, invitations: previous.invitations.map((invite) => invite.id === inviteId ? { ...invite, status: "revoked" } : invite) })),
+    addQuote: (record) => {
+      const nextId = `OR-${String(Math.max(0, ...state.quotes.map((quote) => Number(quote.id.replace(/\D/g, "")) || 0)) + 1).padStart(4, "0")}`;
+      const createdAt = new Date().toISOString().slice(0, 10);
+      setState((previous) => ({ ...previous, quotes: [{ ...record, id: nextId, status: "draft", createdAt }, ...previous.quotes] }));
+      return nextId;
+    },
+    updateQuote: (quoteId, patch) => setState((previous) => ({ ...previous, quotes: previous.quotes.map((quote) => quote.id === quoteId && quote.status !== "approved" ? { ...quote, ...patch } : quote) })),
+    removeQuote: (quoteId) => setState((previous) => ({ ...previous, quotes: previous.quotes.filter((quote) => quote.id !== quoteId || quote.status === "approved") })),
+    setQuoteStatus: (quoteId, status) => setState((previous) => ({ ...previous, quotes: previous.quotes.map((quote) => quote.id === quoteId && quote.status !== "approved" ? { ...quote, status } : quote) })),
+    approveQuote: (quoteId) => {
+      const quote = state.quotes.find((item) => item.id === quoteId);
+      if (!quote || quote.status === "approved") return quote?.workOrderId;
+      const nextId = `OS-${String(Math.max(128, ...state.workOrders.map((order) => Number(order.id.replace(/\D/g, "")) || 0)) + 1).padStart(5, "0")}`;
+      const description = `${quote.title} — ${itemsAsDescription(quote)}${quote.notes.trim() ? `. ${quote.notes.trim()}` : ""}`;
+      setState((previous) => ({
+        ...previous,
+        quotes: previous.quotes.map((item) => item.id === quoteId ? { ...item, status: "approved", workOrderId: nextId } : item),
+        workOrders: [{ id: nextId, client: quote.client, clientId: quote.clientId, service: quote.title, professional: "Você", amountCents: quoteTotal(quote), status: "in_progress", updatedAt: `Criada do orçamento ${quote.id}`, description, descriptionHistory: [{ id: id("desc"), text: description, createdAt: "Descrição inicial" }], diary: [], materialLines: [] }, ...previous.workOrders],
+        clients: previous.clients.map((client) => client.id === quote.clientId ? { ...client, detail: `Orçamento ${quote.id} aprovado`, history: [`Orçamento ${quote.id} aprovado → ${nextId}`, ...client.history] } : client),
+      }));
+      return nextId;
+    },
     acceptInvite: (inviteId) => setState((previous) => {
       const invite = previous.invitations.find((item) => item.id === inviteId);
       if (!invite || invite.status !== "pending") return previous;
