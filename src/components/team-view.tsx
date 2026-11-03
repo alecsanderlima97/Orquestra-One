@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Lock, ShieldCheck } from "lucide-react";
 import { ACCESS_LABEL, INVITABLE_ROLES, PERMISSION_AREAS, ROLE_PRESETS, accessSummary, isGoogleAccount, isValidEmail, type AccessLevel } from "@/src/lib/roles";
+import { getCurrentFirebaseUserToken } from "@/src/lib/firebase-client";
 import { useDemoData, type InvitationRecord, type TeamRecord } from "@/src/components/demo-data";
 import { EmptyState, Modal, PanelHeader, SelectField, TextField, rowOpenProps } from "@/src/components/ui-parts";
 
@@ -95,21 +96,38 @@ function InviteDialog({ onClose }: { onClose: () => void }) {
   const [role, setRole] = useState("Profissional");
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
   const normalized = email.trim().toLowerCase();
 
-  function send() {
+  async function send() {
     if (!isValidEmail(normalized)) return setError("Informe um e-mail válido.");
     if (data.team.some((member) => member.email.toLowerCase() === normalized)) return setError("Esta pessoa já faz parte da equipe.");
     if (data.invitations.some((invite) => invite.status === "pending" && invite.email.toLowerCase() === normalized)) return setError("Já existe um convite pendente para este e-mail. Use Reenviar na lista.");
-    data.invite(normalized, role, "team");
-    setSent(true);
+    if (!data.tenantId) {
+      data.invite(normalized, role, "team");
+      setSent(true);
+      return;
+    }
+    setSending(true);
+    try {
+      const token = await getCurrentFirebaseUserToken();
+      const response = await fetch("/api/auth/invitations", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token ?? ""}` }, body: JSON.stringify({ email: normalized, role, kind: "team" }) });
+      const body = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) return setError(body.error ?? "Não foi possível criar o convite.");
+      await data.reloadInvitations();
+      setSent(true);
+    } catch {
+      setError("Não foi possível criar o convite agora.");
+    } finally {
+      setSending(false);
+    }
   }
 
   if (sent) return <Modal eyebrow="Convite criado" title={normalized} onClose={onClose} footer={<button className="primary-button" type="button" onClick={onClose}>Concluir</button>}>
     <p className="agenda-period-hint">Convite como <strong>{role}</strong> válido por 7 dias. Na versão publicada, a pessoa recebe o e-mail e entra com o Google desta conta; só assim o acesso é liberado, já com as permissões da função.</p>
   </Modal>;
 
-  return <Modal eyebrow="Convidar para a equipe" title="Quem vai usar o sistema?" onClose={onClose} footer={<><button className="secondary-button" type="button" onClick={onClose}>Cancelar</button><button className="primary-button" type="button" onClick={send}>Enviar convite</button></>}>
+  return <Modal eyebrow="Convidar para a equipe" title="Quem vai usar o sistema?" onClose={onClose} footer={<><button className="secondary-button" type="button" onClick={onClose}>Cancelar</button><button className="primary-button" type="button" onClick={send} disabled={sending}>{sending ? "Enviando..." : "Enviar convite"}</button></>}>
     <TextField label="Gmail da pessoa" type="email" value={email} onChange={(value) => { setEmail(value); setError(""); }} inputMode="email" placeholder="nome@gmail.com" required />
     {normalized && isValidEmail(normalized) && !isGoogleAccount(normalized) && <p className="agenda-period-hint">O acesso é por login do Google. Esse e-mail precisa ser uma conta Google (por exemplo, Google Workspace) para a pessoa conseguir entrar.</p>}
     <SelectField label="Função" value={role} onChange={setRole} options={INVITABLE_ROLES.map((item) => ({ value: item, label: `${item} — ${accessSummary(item)}` }))} />

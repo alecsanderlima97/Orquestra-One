@@ -1,7 +1,8 @@
 rules_version = '2';
 
-// Orquestra One — banco próprio. Cada empresa só enxerga os dados da própria empresa.
-// users / companies / invitations só são gravados pelo servidor (Admin SDK ignora estas regras).
+// Orquestra One — banco próprio. Cada empresa só enxerga os dados da própria empresa,
+// e dentro dela só o que a função permite (users/{uid}.access, definido no aceite do convite).
+// users / companies / invitations / audit só são gravados pelo servidor (Admin SDK ignora estas regras).
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -25,8 +26,17 @@ service cloud.firestore {
       return hasProfile() && profile().active == true && profile().tenantId == tenantId;
     }
 
-    function canWrite(tenantId) {
-      return inTenant(tenantId) && profile().role in ['company_owner', 'company_admin', 'company_user'];
+    // Nível da pessoa numa área: 'none' | 'view' | 'edit'. Sem mapa de acesso = nenhum.
+    function level(area) {
+      return profile().access[area];
+    }
+
+    function canRead(tenantId, area) {
+      return inTenant(tenantId) && level(area) in ['view', 'edit'];
+    }
+
+    function canEdit(tenantId, area) {
+      return inTenant(tenantId) && level(area) == 'edit';
     }
 
     // Cada usuário lê o próprio perfil. Nunca grava pelo navegador.
@@ -35,15 +45,49 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Empresa: lida pelos membros; criada/alterada só pelo servidor.
     match /companies/{tenantId} {
       allow read: if inTenant(tenantId) || isPlatform();
       allow write: if false;
 
-      // Dados operacionais da empresa (agenda, OS, financeiro, estoque, clientes...).
-      match /{collection}/{docId} {
-        allow read: if inTenant(tenantId);
-        allow create, update, delete: if canWrite(tenantId);
+      match /appointments/{docId} {
+        allow read: if canRead(tenantId, 'agenda');
+        allow create, update, delete: if canEdit(tenantId, 'agenda');
+      }
+      match /workOrders/{docId} {
+        allow read: if canRead(tenantId, 'orders');
+        allow create, update, delete: if canEdit(tenantId, 'orders');
+      }
+      match /quotes/{docId} {
+        allow read: if canRead(tenantId, 'orders');
+        allow create, update, delete: if canEdit(tenantId, 'orders');
+      }
+      match /finance/{docId} {
+        allow read: if canRead(tenantId, 'finance');
+        allow create, update, delete: if canEdit(tenantId, 'finance');
+      }
+      match /stock/{docId} {
+        allow read: if canRead(tenantId, 'stock');
+        allow create, update, delete: if canEdit(tenantId, 'stock');
+      }
+      match /stockMovements/{docId} {
+        allow read: if canRead(tenantId, 'stock');
+        allow create, update, delete: if canEdit(tenantId, 'stock');
+      }
+      match /clients/{docId} {
+        allow read: if canRead(tenantId, 'clients');
+        allow create, update, delete: if canEdit(tenantId, 'clients');
+      }
+      match /suppliers/{docId} {
+        allow read: if canRead(tenantId, 'suppliers');
+        allow create, update, delete: if canEdit(tenantId, 'suppliers');
+      }
+      match /team/{docId} {
+        allow read: if canRead(tenantId, 'team');
+        allow create, update, delete: if canEdit(tenantId, 'team');
+      }
+      match /audit/{docId} {
+        allow read: if inTenant(tenantId) && level('team') == 'edit';
+        allow write: if false;
       }
     }
 

@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { collection, deleteDoc, doc, onSnapshot, setDoc, type Unsubscribe } from "firebase/firestore";
-import { getFirestoreDb, waitForFirebaseUser } from "@/src/lib/firebase-client";
+import { getCurrentFirebaseUserToken, getFirestoreDb, waitForFirebaseUser } from "@/src/lib/firebase-client";
 import { accessSummary } from "@/src/lib/roles";
 import { itemsAsDescription, quoteTotal, type QuoteRecord } from "@/src/lib/quotes";
 import { appointments, clients, financeItems, stockItems, suppliers, teamMembers, workOrders } from "@/src/domain/mock-data";
@@ -105,6 +105,7 @@ type DemoActions = {
   removeQuote: (quoteId: string) => void;
   setQuoteStatus: (quoteId: string, status: "draft" | "sent" | "rejected") => void;
   approveQuote: (quoteId: string) => string | undefined;
+  reloadInvitations: () => Promise<string | null>;
 };
 
 const storageKey = "orquestra-one-demo-v5";
@@ -378,6 +379,21 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
     updateQuote: (quoteId, patch) => setState((previous) => ({ ...previous, quotes: previous.quotes.map((quote) => quote.id === quoteId && quote.status !== "approved" ? { ...quote, ...patch } : quote) })),
     removeQuote: (quoteId) => setState((previous) => ({ ...previous, quotes: previous.quotes.filter((quote) => quote.id !== quoteId || quote.status === "approved") })),
     setQuoteStatus: (quoteId, status) => setState((previous) => ({ ...previous, quotes: previous.quotes.map((quote) => quote.id === quoteId && quote.status !== "approved" ? { ...quote, status } : quote) })),
+    reloadInvitations: async () => {
+      const tenant = tenantRef.current;
+      if (!tenant) return null;
+      try {
+        const token = await getCurrentFirebaseUserToken();
+        const response = await fetch("/api/auth/invitations", { headers: { authorization: `Bearer ${token ?? ""}` }, cache: "no-store" });
+        const body = await response.json().catch(() => ({})) as { invitations?: InvitationRecord[]; error?: string };
+        if (!response.ok || !body.invitations) return body.error ?? "Não foi possível carregar os convites.";
+        const list = body.invitations;
+        setState((previous) => ({ ...previous, invitations: list }));
+        return null;
+      } catch {
+        return "Não foi possível carregar os convites.";
+      }
+    },
     approveQuote: (quoteId) => {
       const quote = state.quotes.find((item) => item.id === quoteId);
       if (!quote || quote.status === "approved") return quote?.workOrderId;
