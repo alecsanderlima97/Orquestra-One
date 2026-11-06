@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:rules": "firebase emulators:exec --only firestore --project orquestra-one-rules-test \"vitest run tests/firestore.rules.test.ts\""
   },
   "dependencies": {
     "firebase": "^13.1.0",
@@ -17,9 +19,12 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.7.2"
+    "firebase-tools": "^15.35.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.7"
   }
 }

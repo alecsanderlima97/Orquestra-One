@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFirebaseAdminServices } from "@/src/lib/firebase-admin";
-import { INVITABLE_ROLES } from "@/src/lib/roles";
+import { INVITABLE_ROLES, ROLE_CODES } from "@/src/lib/roles";
 
 export const runtime = "nodejs";
 
 const platformRoles = new Set(["platform_owner", "orquestra_admin"]);
 const companyRoles = new Set(["company_owner", "company_admin"]);
-const roleMap: Record<string, string> = {
-  Administrador: "company_admin",
-  Financeiro: "company_user",
-  Profissional: "company_user",
-  Auxiliar: "company_user",
-  Visualizador: "viewer",
-};
+const roleMap = ROLE_CODES;
 
 function formatDate(value: unknown) {
   const date = value && typeof value === "object" && "toDate" in value && typeof value.toDate === "function" ? (value.toDate() as Date) : new Date(String(value ?? ""));
@@ -59,6 +53,7 @@ export async function POST(request: NextRequest) {
     const kind = body.kind === "owner" ? "owner" : "team";
     if (!email || !email.includes("@")) return NextResponse.json({ error: "Informe um e-mail válido." }, { status: 400 });
 
+    if (caller?.active !== true) return NextResponse.json({ error: "Sem permissão para convidar." }, { status: 403 });
     const callerRole = String(caller?.role ?? "");
     if (kind === "owner" && !platformRoles.has(callerRole)) return NextResponse.json({ error: "Somente a Central Admin pode convidar proprietários." }, { status: 403 });
     if (kind === "team" && !companyRoles.has(callerRole)) return NextResponse.json({ error: "Somente o proprietário ou administrador pode convidar a equipe." }, { status: 403 });

@@ -1,6 +1,6 @@
 import { getApp, getApps, initializeApp, type FirebaseOptions } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { getAuth, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect } from "firebase/auth";
+import { getAuth, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut } from "firebase/auth";
 
 const config: FirebaseOptions = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -78,4 +78,11 @@ export function waitForFirebaseUser() {
   return new Promise<import("firebase/auth").User | null>((resolve) => {
     const unsubscribe = onAuthStateChanged(auth, (user) => { unsubscribe(); resolve(user); });
   });
+}
+
+/** Sai do One: apaga a sessão do servidor e o login Google deste navegador. */
+export async function signOutOfOne() {
+  await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+  if (isFirebaseClientConfigured) await signOut(getAuth(getFirebaseApp())).catch(() => undefined);
+  window.location.href = "/login";
 }

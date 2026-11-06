@@ -2,7 +2,7 @@ rules_version = '2';
 
 // Orquestra One — banco próprio. Cada empresa só enxerga os dados da própria empresa,
 // e dentro dela só o que a função permite (users/{uid}.access, definido no aceite do convite).
-// users / companies / invitations / audit só são gravados pelo servidor (Admin SDK ignora estas regras).
+// users / companies / team / invitations / audit só são gravados pelo servidor (Admin SDK ignora estas regras).
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -81,9 +81,10 @@ service cloud.firestore {
         allow read: if canRead(tenantId, 'suppliers');
         allow create, update, delete: if canEdit(tenantId, 'suppliers');
       }
+      // Equipe muda só pelo servidor (/api/team), que altera junto o acesso real em users/{uid}.
       match /team/{docId} {
         allow read: if canRead(tenantId, 'team');
-        allow create, update, delete: if canEdit(tenantId, 'team');
+        allow write: if false;
       }
       match /audit/{docId} {
         allow read: if inTenant(tenantId) && level('team') == 'edit';

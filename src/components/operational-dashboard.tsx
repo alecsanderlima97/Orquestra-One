@@ -6,13 +6,14 @@ import {
   CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, ClipboardList, Clock3, FileBarChart,
   FilePlus2, LayoutDashboard, MapPin, Menu, PackageCheck, Plus, Search, Settings2,
   MessageCircle, ShieldCheck, Sparkles, UserCog, Users, WalletCards, Wrench, X, type LucideIcon,
-  FileText,
+  FileText, LogOut,
 } from "lucide-react";
 import { formatBRL } from "@/src/domain/money";
 import type { SectionId } from "@/src/domain/types";
 import { useDemoData, type AppointmentPatch, type AppointmentRecord, type ClientRecord, type FinanceRecord, type WorkOrderRecord } from "@/src/components/demo-data";
 import { RecordDialog, type RecordKind } from "@/src/components/record-dialog";
 import { VoiceDictationButton } from "@/src/components/voice-input";
+import { signOutOfOne } from "@/src/lib/firebase-client";
 import { EmptyState, PanelHeader, StatusPill, WhatsAppLink, type Status } from "@/src/components/ui-parts";
 import { OrdersView } from "@/src/components/orders-view";
 import { QuotesView } from "@/src/components/quotes-view";
@@ -182,7 +183,7 @@ export function OperationalDashboard() {
       <button className="workspace-switcher" type="button" onClick={() => navigate("settings")}><span className="workspace-avatar">EC</span><span className="workspace-copy"><strong>Empresa Central</strong><small>Workspace principal</small></span><ChevronDown size={16} /></button>
       <div className="nav-label">Navegação</div><nav className="main-nav" aria-label="Navegação principal">{navigation.map(({ id, label, icon: Icon }) => <button key={id} type="button" className={`nav-item ${activeSection === id ? "nav-item-active" : ""}`} onClick={() => navigate(id)}><Icon size={18} strokeWidth={activeSection === id ? 2.25 : 1.8} /><span>{label}</span>{id === "agenda" && <em>{todayAppointments}</em>}</button>)}</nav>
       <div className="sidebar-spacer" /><div className="sidebar-note"><Sparkles size={16} /><span>Dados operacionais ficam conectados.<br /><strong>Feche a OS sem retrabalho.</strong></span></div>
-      <a className="nav-item nav-settings" href="/central-admin"><ShieldCheck size={18} /><span>Central Admin</span></a><button className={`nav-item nav-settings ${activeSection === "settings" ? "nav-item-active" : ""}`} type="button" onClick={() => navigate("settings")}><Settings2 size={18} /><span>Configurações</span></button><div className="sidebar-footer"><ShieldCheck size={14} /> Base preparada para tenant</div>
+      <a className="nav-item nav-settings" href="/central-admin"><ShieldCheck size={18} /><span>Central Admin</span></a><button className={`nav-item nav-settings ${activeSection === "settings" ? "nav-item-active" : ""}`} type="button" onClick={() => navigate("settings")}><Settings2 size={18} /><span>Configurações</span></button>{data.syncStatus !== "demo" && <button className="nav-item nav-settings" type="button" onClick={() => void signOutOfOne()}><LogOut size={18} /><span>Sair</span></button>}<div className="sidebar-footer"><ShieldCheck size={14} /> Base preparada para tenant</div>
     </aside>
     {mobileMenuOpen && <button className="sidebar-backdrop" aria-label="Fechar menu" onClick={() => setMobileMenuOpen(false)} />}
     <main className="main-content"><header className="topbar"><div className="topbar-left"><button className="icon-button menu-trigger" type="button" onClick={() => setMobileMenuOpen(true)} aria-label="Abrir menu"><Menu size={20} /></button><span className="topbar-context">Workspace <ChevronRight size={14} /> <strong>Empresa Central</strong></span></div><div className="topbar-actions"><GlobalSearch onNavigate={navigate} /><NotificationBell onNavigate={navigate} /><div className="topbar-user" role="button" tabIndex={0} onClick={() => navigate("settings")} onKeyDown={(event) => { if (event.key === "Enter") navigate("settings"); }}><span className="user-avatar">AL</span><span className="user-name">Alecsander Lima</span><ChevronDown size={15} /></div></div></header>

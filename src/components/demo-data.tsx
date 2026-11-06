@@ -1,9 +1,9 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { collection, deleteDoc, doc, onSnapshot, setDoc, type Unsubscribe } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from "firebase/firestore";
 import { getCurrentFirebaseUserToken, getFirestoreDb, waitForFirebaseUser } from "@/src/lib/firebase-client";
-import { accessSummary } from "@/src/lib/roles";
+import { COLLECTION_AREA, accessSummary, type AccessLevel, type PermissionArea } from "@/src/lib/roles";
 import { itemsAsDescription, quoteTotal, type QuoteRecord } from "@/src/lib/quotes";
 import { appointments, clients, financeItems, stockItems, suppliers, teamMembers, workOrders } from "@/src/domain/mock-data";
 
@@ -141,6 +141,24 @@ function emptyState(): DemoState {
 }
 
 const SYNC_KEYS = ["clients", "suppliers", "appointments", "workOrders", "finance", "stock", "team", "stockMovements", "quotes"] as const;
+type SyncKey = typeof SYNC_KEYS[number];
+/** Coleções que só o servidor grava (a equipe muda pela rota /api/team, que também muda o acesso real). */
+const SERVER_ONLY_KEYS = new Set<SyncKey>(["team"]);
+type AccessMap = Partial<Record<PermissionArea, AccessLevel>>;
+const canReadKey = (access: AccessMap, key: SyncKey) => ["view", "edit"].includes(access[COLLECTION_AREA[key]] ?? "none");
+const canWriteKey = (access: AccessMap, key: SyncKey) => !SERVER_ONLY_KEYS.has(key) && access[COLLECTION_AREA[key]] === "edit";
+
+async function teamRequest(memberId: string, method: "PATCH" | "DELETE", body?: unknown) {
+  try {
+    const token = await getCurrentFirebaseUserToken();
+    const response = await fetch(`/api/team/members/${encodeURIComponent(memberId)}`, { method, headers: { "content-type": "application/json", authorization: `Bearer ${token ?? ""}` }, body: body ? JSON.stringify(body) : undefined });
+    if (response.ok) return;
+    const payload = await response.json().catch(() => ({})) as { error?: string };
+    window.alert(payload.error ?? "Não foi possível salvar a alteração da equipe.");
+  } catch {
+    window.alert("Não foi possível salvar a alteração da equipe.");
+  }
+}
 
 function canon(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canon).join(",")}]`;
@@ -171,6 +189,7 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
   const syncedRef = useRef<Record<string, Map<string, string>>>({});
   const ordRef = useRef<Map<string, number>>(new Map());
   const ordSeq = useRef(0);
+  const accessRef = useRef<AccessMap>({});
 
   const connectTenant = useCallback((nextTenant: string) => {
     if (tenantRef.current === nextTenant) return;
@@ -178,6 +197,7 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
     unsubsRef.current = [];
     syncedRef.current = {};
     ordRef.current = new Map();
+    accessRef.current = {};
     tenantRef.current = nextTenant;
     setTenantId(nextTenant);
     setState(emptyState());
@@ -187,8 +207,15 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
         const user = await waitForFirebaseUser();
         if (!user || tenantRef.current !== nextTenant) { if (!user) setSyncStatus("error"); return; }
         const db = getFirestoreDb();
+        // Assina só o que a função da pessoa pode ler; uma área sem acesso não derruba o painel.
+        const profile = (await getDoc(doc(db, "users", user.uid))).data();
+        const access = (profile?.access && typeof profile.access === "object" ? profile.access : {}) as AccessMap;
+        if (tenantRef.current !== nextTenant) return;
+        accessRef.current = access;
+        const readable = SYNC_KEYS.filter((key) => canReadKey(access, key));
+        if (readable.length === 0) { setSyncStatus("online"); return; }
         let loaded = 0;
-        for (const key of SYNC_KEYS) {
+        for (const key of readable) {
           let first = true;
           const stop = onSnapshot(collection(db, `companies/${nextTenant}/${key}`), (snapshot) => {
             const map = new Map<string, string>();
@@ -205,7 +232,7 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
             rows.sort((a, b) => b[0] - a[0]);
             syncedRef.current[key] = map;
             setState((previous) => ({ ...previous, [key]: rows.map((row) => row[1]) }));
-            if (first) { first = false; loaded += 1; if (loaded === SYNC_KEYS.length) setSyncStatus("online"); }
+            if (first) { first = false; loaded += 1; if (loaded === readable.length) setSyncStatus("online"); }
           }, () => setSyncStatus("error"));
           unsubsRef.current.push(stop);
         }
@@ -225,7 +252,7 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
     try { db = getFirestoreDb(); } catch { return; }
     for (const key of SYNC_KEYS) {
       const synced = syncedRef.current[key];
-      if (!synced) continue;
+      if (!synced || !canWriteKey(accessRef.current, key)) continue;
       const list = state[key] as unknown as Array<{ id: string }>;
       const seen = new Set<string>();
       for (const record of [...list].reverse()) {
@@ -305,7 +332,7 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
       };
     }),
     invite: (email, role, kind) => setState((previous) => ({ ...previous, invitations: [{ id: id("invite"), email, role, kind, status: "pending", createdAt: "Agora", expiresAt: "Em 7 dias" }, ...previous.invitations] })),
-    addTeamMember: (record) => setState((previous) => ({ ...previous, team: [{ ...record, id: id("tm"), initials: initials(record.name), tone: tones[previous.team.length % tones.length] }, ...previous.team] })),
+    addTeamMember: (record) => tenantRef.current ? window.alert("Para incluir alguém na equipe, use Equipe → Convidar pessoa.") : setState((previous) => ({ ...previous, team: [{ ...record, id: id("tm"), initials: initials(record.name), tone: tones[previous.team.length % tones.length] }, ...previous.team] })),
 
     updateClient: (clientId, patch) => setState((previous) => {
       const nameChanged = typeof patch.name === "string" && patch.name.trim();
@@ -366,8 +393,8 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
         finance: [...payable, ...previous.finance],
       };
     }),
-    updateTeamMember: (memberId, patch) => setState((previous) => ({ ...previous, team: previous.team.map((member) => member.id === memberId ? { ...member, ...patch, ...(patch.name?.trim() ? { initials: initials(patch.name) } : {}) } : member) })),
-    removeTeamMember: (memberId) => setState((previous) => ({ ...previous, team: previous.team.filter((member) => member.id !== memberId || member.role === "Proprietário") })),
+    updateTeamMember: (memberId, patch) => tenantRef.current ? void teamRequest(memberId, "PATCH", { role: patch.role, active: patch.active }) : setState((previous) => ({ ...previous, team: previous.team.map((member) => member.id === memberId ? { ...member, ...patch, ...(patch.name?.trim() ? { initials: initials(patch.name) } : {}) } : member) })),
+    removeTeamMember: (memberId) => tenantRef.current ? void teamRequest(memberId, "DELETE") : setState((previous) => ({ ...previous, team: previous.team.filter((member) => member.id !== memberId || member.role === "Proprietário") })),
     resendInvite: (inviteId) => setState((previous) => ({ ...previous, invitations: previous.invitations.map((invite) => invite.id === inviteId ? { ...invite, status: "pending", createdAt: "Reenviado agora", expiresAt: "Em 7 dias" } : invite) })),
     revokeInvite: (inviteId) => setState((previous) => ({ ...previous, invitations: previous.invitations.map((invite) => invite.id === inviteId ? { ...invite, status: "revoked" } : invite) })),
     addQuote: (record) => {
