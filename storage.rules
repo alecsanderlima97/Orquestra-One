@@ -1,0 +1,30 @@
+rules_version = '2';
+
+// Anexos das ordens de serviço: cada empresa só acessa a própria pasta, conforme a função
+// (mesmo mapa users/{uid}.access usado nas regras do Firestore).
+service firebase.storage {
+  match /b/{bucket}/o {
+    function profile() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+    function inTenant(tenantId) {
+      return request.auth != null && profile().active == true && profile().tenantId == tenantId;
+    }
+    function ordersLevel() {
+      return profile().access.orders;
+    }
+
+    match /companies/{tenantId}/workOrders/{orderId}/{fileName} {
+      allow read: if inTenant(tenantId) && ordersLevel() in ['view', 'edit'];
+      allow create: if inTenant(tenantId) && ordersLevel() == 'edit'
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)|application/pdf');
+      allow delete: if inTenant(tenantId) && ordersLevel() == 'edit';
+      allow update: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { collection, deleteDoc, doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from "firebase/firestore";
 import { getCurrentFirebaseUserToken, getFirestoreDb, waitForFirebaseUser } from "@/src/lib/firebase-client";
 import { COLLECTION_AREA, accessSummary, type AccessLevel, type PermissionArea } from "@/src/lib/roles";
+import { deleteStoredAttachment, storeOrderAttachment, type OrderAttachment } from "@/src/lib/order-files";
+import type { OrderSignature } from "@/src/lib/work-order-document";
 import { itemsAsDescription, quoteTotal, type QuoteRecord } from "@/src/lib/quotes";
 import { appointments, clients, financeItems, stockItems, suppliers, teamMembers, workOrders } from "@/src/domain/mock-data";
 
@@ -43,7 +45,8 @@ export type AppointmentCadence = "single" | "daily" | "weekdays" | "weekly";
 export type AppointmentRecord = (typeof appointments)[number] & { clientId: string; date: string; endDate?: string; cadence?: AppointmentCadence; seriesId?: string; notes: string; workOrderId?: string };
 export type AppointmentPatch = Partial<Pick<AppointmentRecord, "date" | "time" | "duration" | "endDate" | "status" | "professional" | "notes" | "workOrderId">>;
 export type DescriptionRevision = { id: string; text: string; createdAt: string };
-export type WorkOrderRecord = (typeof workOrders)[number] & { clientId: string; description: string; descriptionHistory?: DescriptionRevision[]; diary: Array<{ id: string; text: string; createdAt: string }>; materialLines: Array<{ stockId: string; quantity: number }> };
+export type WorkOrderRecord = (typeof workOrders)[number] & { clientId: string; description: string; descriptionHistory?: DescriptionRevision[]; diary: Array<{ id: string; text: string; createdAt: string }>; materialLines: Array<{ stockId: string; quantity: number }>; attachments?: OrderAttachment[]; signature?: OrderSignature };
+export type { OrderAttachment, OrderSignature };
 export type FinanceRecord = (typeof financeItems)[number] & { originId?: string; category: string; paidAt?: string };
 export type StockRecord = (typeof stockItems)[number] & { costCents: number };
 export type TeamRecord = (typeof teamMembers)[number] & { email: string; active?: boolean };
@@ -80,6 +83,10 @@ type DemoActions = {
   addDiary: (workOrderId: string, text: string) => void;
   reviseWorkOrderDescription: (workOrderId: string, text: string) => void;
   closeWorkOrder: (workOrderId: string) => void;
+  addOrderAttachment: (workOrderId: string, file: File) => Promise<string | null>;
+  removeOrderAttachment: (workOrderId: string, attachmentId: string) => void;
+  signWorkOrder: (workOrderId: string, signature: OrderSignature) => void;
+  clearWorkOrderSignature: (workOrderId: string) => void;
   invite: (email: string, role: string, kind: "owner" | "team") => void;
   addTeamMember: (record: Omit<TeamRecord, "id" | "initials" | "tone">) => void;
   updateClient: (clientId: string, patch: Partial<Omit<ClientRecord, "id" | "initials" | "tone" | "history" | "detail">>) => void;
@@ -314,6 +321,24 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
     addStock: (record) => setState((previous) => ({ ...previous, stock: [{ ...record, id: id("st") }, ...previous.stock] })),
     addDiary: (workOrderId, text) => setState((previous) => ({ ...previous, workOrders: previous.workOrders.map((order) => order.id === workOrderId ? { ...order, updatedAt: "Diário atualizado agora", diary: [{ id: id("diary"), text, createdAt: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()) }, ...order.diary] } : order) })),
     reviseWorkOrderDescription: (workOrderId, text) => setState((previous) => ({ ...previous, workOrders: previous.workOrders.map((order) => { if (order.id !== workOrderId || !text.trim()) return order; const history = order.descriptionHistory?.length ? order.descriptionHistory : [{ id: id("desc"), text: order.description, createdAt: "Descrição inicial" }]; return { ...order, description: text.trim(), updatedAt: "Descrição revisada agora", descriptionHistory: [{ id: id("desc"), text: text.trim(), createdAt: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()) }, ...history] }; }) })),
+    addOrderAttachment: async (workOrderId, file) => {
+      try {
+        const createdAt = new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+        const attachment = await storeOrderAttachment(file, workOrderId, tenantRef.current, createdAt);
+        setState((previous) => ({ ...previous, workOrders: previous.workOrders.map((order) => order.id === workOrderId ? { ...order, attachments: [...(order.attachments ?? []), attachment] } : order) }));
+        return null;
+      } catch (error) {
+        return error instanceof Error ? error.message : "Não foi possível anexar o arquivo.";
+      }
+    },
+    removeOrderAttachment: (workOrderId, attachmentId) => setState((previous) => ({ ...previous, workOrders: previous.workOrders.map((order) => {
+      if (order.id !== workOrderId) return order;
+      const target = order.attachments?.find((item) => item.id === attachmentId);
+      if (target) void deleteStoredAttachment(target);
+      return { ...order, attachments: (order.attachments ?? []).filter((item) => item.id !== attachmentId) };
+    }) })),
+    signWorkOrder: (workOrderId, signature) => setState((previous) => ({ ...previous, workOrders: previous.workOrders.map((order) => order.id === workOrderId ? { ...order, signature, diary: [{ id: id("diary"), text: `Cliente assinou a O.S. (${signature.signerName})`, createdAt: signature.signedAt }, ...order.diary] } : order) })),
+    clearWorkOrderSignature: (workOrderId) => setState((previous) => ({ ...previous, workOrders: previous.workOrders.map((order) => order.id === workOrderId && order.status !== "completed" ? { ...order, signature: undefined } : order) })),
     closeWorkOrder: (workOrderId) => setState((previous) => {
       const order = previous.workOrders.find((item) => item.id === workOrderId);
       if (!order || order.status === "completed") return previous;

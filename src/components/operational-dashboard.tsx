@@ -14,6 +14,7 @@ import { useDemoData, type AppointmentPatch, type AppointmentRecord, type Client
 import { RecordDialog, type RecordKind } from "@/src/components/record-dialog";
 import { VoiceDictationButton } from "@/src/components/voice-input";
 import { signOutOfOne } from "@/src/lib/firebase-client";
+import { NotificationPermissionButton, useAppointmentNotifications, useUpcomingAppointments } from "@/src/components/reminders";
 import { EmptyState, PanelHeader, StatusPill, WhatsAppLink, type Status } from "@/src/components/ui-parts";
 import { OrdersView } from "@/src/components/orders-view";
 import { QuotesView } from "@/src/components/quotes-view";
@@ -238,7 +239,9 @@ function NotificationBell({ onNavigate }: { onNavigate: (section: SectionId) => 
   const [open, setOpen] = useState(false);
   const [today, setToday] = useState("");
   useEffect(() => { setToday(todayDate()); }, []);
-  const alerts: NavigationHit[] = [];
+  const upcoming = useUpcomingAppointments(data.appointments);
+  useAppointmentNotifications(upcoming);
+  const alerts: NavigationHit[] = upcoming.map((item) => ({ key: `up-${item.id}`, label: `Começa às ${item.time}: ${item.client}`, hint: `${item.service} · ${item.professional}`, section: "agenda" as SectionId }));
   if (today) {
     data.appointments.filter((item) => item.date === today && item.status === "pending").forEach((item) => alerts.push({ key: `ag-${item.id}`, label: `Confirmar ${item.client} às ${item.time}`, hint: "Agenda de hoje", section: "agenda" }));
     data.finance.filter((item) => financeStatus(item, today) === "overdue").forEach((item) => alerts.push({ key: `fv-${item.id}`, label: `Vencido: ${item.title}`, hint: `${item.party} · ${formatBRL(item.amountCents)}`, section: "finance" }));
@@ -250,7 +253,7 @@ function NotificationBell({ onNavigate }: { onNavigate: (section: SectionId) => 
   return <div className="notification-wrap">
     <button className="icon-button notification-button" type="button" aria-label={alerts.length ? `Notificações (${alerts.length})` : "Notificações"} aria-expanded={open} onClick={() => setOpen((value) => !value)}><Bell size={19} />{alerts.length > 0 && <span />}</button>
     {open && <button className="popover-backdrop" type="button" aria-label="Fechar notificações" onClick={() => setOpen(false)} />}
-    {open && <div className="notification-popover" role="dialog" aria-label="Notificações"><h3>{alerts.length ? "Precisa da sua atenção" : "Tudo em dia"}</h3>{alerts.length ? <ul>{alerts.slice(0, 8).map((alert) => <li key={alert.key}><button type="button" onClick={() => { onNavigate(alert.section); setOpen(false); }}><strong>{alert.label}</strong><small>{alert.hint}</small></button></li>)}</ul> : <p className="notification-empty">Sem pendências de agenda, financeiro ou estoque.</p>}</div>}
+    {open && <div className="notification-popover" role="dialog" aria-label="Notificações"><h3>{alerts.length ? "Precisa da sua atenção" : "Tudo em dia"}</h3>{alerts.length ? <ul>{alerts.slice(0, 8).map((alert) => <li key={alert.key}><button type="button" onClick={() => { onNavigate(alert.section); setOpen(false); }}><strong>{alert.label}</strong><small>{alert.hint}</small></button></li>)}</ul> : <p className="notification-empty">Sem pendências de agenda, financeiro ou estoque.</p>}<NotificationPermissionButton /></div>}
   </div>;
 }
 

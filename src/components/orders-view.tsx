@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CheckCircle2, Search, Sparkles } from "lucide-react";
+import { CheckCircle2, FileDown, Search, Sparkles } from "lucide-react";
+import { OrderAttachmentsSection, OrderSignatureSection, useWorkOrderPdf } from "@/src/components/order-extras";
 import { formatBRL } from "@/src/domain/money";
 import { todayDate } from "@/src/lib/agenda";
 import { writeClientServiceSummary, writeWhatsappMessage } from "@/src/lib/report-writer";
@@ -121,6 +122,7 @@ function OrderDetailDialog({ orderId, onClose, onOpen, onEdit, onDescription }: 
   const [materialId, setMaterialId] = useState("");
   const [materialQty, setMaterialQty] = useState("1");
   const [materialError, setMaterialError] = useState("");
+  const printOrder = useWorkOrderPdf(COMPANY_NAME);
   if (!order) return null;
   const client = data.clients.find((item) => item.id === order.clientId);
   const charges = data.finance.filter((item) => item.originId === order.id);
@@ -147,6 +149,7 @@ function OrderDetailDialog({ orderId, onClose, onOpen, onEdit, onDescription }: 
     <Modal size="wide" eyebrow={`Ordem de serviço · ${order.id}`} title={order.service} onClose={onClose} footer={<>
       <button className="secondary-button" type="button" onClick={onClose}>Fechar</button>
       <button className="secondary-button" type="button" onClick={onEdit}>Editar</button>
+      <button className="secondary-button" type="button" onClick={() => printOrder(order)}><FileDown size={15} /> PDF da O.S.</button>
       <button className="secondary-button" type="button" onClick={() => setSummaryOpen(true)}><Sparkles size={15} /> Texto para o cliente</button>
       {!locked && <button className="secondary-button" type="button" onClick={() => confirmCloseOrder(order.id, data.closeWorkOrder)}>Fechar ordem</button>}
       <button className="primary-button" type="button" onClick={() => { onClose(); onOpen("diary", order.id); }}>Registrar no diário</button>
@@ -193,6 +196,8 @@ function OrderDetailDialog({ orderId, onClose, onOpen, onEdit, onDescription }: 
         <h3>Agenda desta ordem</h3>
         <ul className="order-detail-list">{appointments.map((item) => <li key={item.id}>{item.date.split("-").reverse().join("/")} às {item.time} · {item.duration} · {item.professional}</li>)}</ul>
       </section>}
+      <OrderAttachmentsSection order={order} />
+      <OrderSignatureSection order={order} defaultName={client?.name ?? order.client} />
       <section className="order-detail-section">
         <h3>Diário ({order.diary.length})</h3>
         {order.diary.length ? <ul className="order-detail-list">{order.diary.map((entry) => <li key={entry.id}><time>{entry.createdAt}</time>{entry.text}</li>)}</ul> : <p className="order-detail-empty">Nenhum registro no diário ainda.</p>}

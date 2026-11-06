@@ -8,7 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:rules": "firebase emulators:exec --only firestore --project orquestra-one-rules-test \"vitest run tests/firestore.rules.test.ts\""
+    "test:rules": "firebase emulators:exec --only firestore,storage --project orquestra-one-rules-test \"vitest run\""
   },
   "dependencies": {
     "firebase": "^13.1.0",
