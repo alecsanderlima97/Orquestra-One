@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { collection, deleteDoc, doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, serverTimestamp, setDoc, type Unsubscribe } from "firebase/firestore";
 import { getCurrentFirebaseUserToken, getFirestoreDb, waitForFirebaseUser } from "@/src/lib/firebase-client";
 import { COLLECTION_AREA, accessSummary, type AccessLevel, type PermissionArea } from "@/src/lib/roles";
 import { deleteStoredAttachment, storeOrderAttachment, type OrderAttachment } from "@/src/lib/order-files";
@@ -155,6 +155,12 @@ type AccessMap = Partial<Record<PermissionArea, AccessLevel>>;
 const canReadKey = (access: AccessMap, key: SyncKey) => ["view", "edit"].includes(access[COLLECTION_AREA[key]] ?? "none");
 const canWriteKey = (access: AccessMap, key: SyncKey) => !SERVER_ONLY_KEYS.has(key) && access[COLLECTION_AREA[key]] === "edit";
 
+/** Histórico só de inclusão: quem criou, alterou ou apagou cada registro. Não pode ser editado nem apagado. */
+function logActivity(db: ReturnType<typeof getFirestoreDb>, tenant: string, uid: string | null, collectionName: string, docId: string, action: "create" | "update" | "delete") {
+  if (!uid) return;
+  addDoc(collection(db, `companies/${tenant}/activity`), { actorUid: uid, collection: collectionName, docId, action, at: serverTimestamp() }).catch(() => undefined);
+}
+
 async function teamRequest(memberId: string, method: "PATCH" | "DELETE", body?: unknown) {
   try {
     const token = await getCurrentFirebaseUserToken();
@@ -197,6 +203,7 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
   const ordRef = useRef<Map<string, number>>(new Map());
   const ordSeq = useRef(0);
   const accessRef = useRef<AccessMap>({});
+  const uidRef = useRef<string | null>(null);
 
   const connectTenant = useCallback((nextTenant: string) => {
     if (tenantRef.current === nextTenant) return;
@@ -219,6 +226,7 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
         const access = (profile?.access && typeof profile.access === "object" ? profile.access : {}) as AccessMap;
         if (tenantRef.current !== nextTenant) return;
         accessRef.current = access;
+        uidRef.current = user.uid;
         const readable = SYNC_KEYS.filter((key) => canReadKey(access, key));
         if (readable.length === 0) { setSyncStatus("online"); return; }
         let loaded = 0;
@@ -231,6 +239,8 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
               const data = entry.data() as Record<string, unknown>;
               const ord = typeof data._ord === "number" ? data._ord : 0;
               delete data._ord;
+              delete data._by;
+              delete data._at;
               const record = { ...data, id: entry.id };
               ordRef.current.set(`${key}/${entry.id}`, ord);
               map.set(entry.id, canon(JSON.parse(JSON.stringify(record))));
@@ -267,17 +277,21 @@ export function DemoDataProvider({ children }: { children: React.ReactNode }) {
         const clean = JSON.parse(JSON.stringify(record)) as Record<string, unknown>;
         const signature = canon(clean);
         if (synced.get(record.id) === signature) continue;
+        const isNew = !synced.has(record.id);
         synced.set(record.id, signature);
         const ordKey = `${key}/${record.id}`;
         let ord = ordRef.current.get(ordKey);
         if (!ord) { ord = Date.now() * 1000 + (ordSeq.current++ % 1000); ordRef.current.set(ordKey, ord); }
-        setDoc(doc(db, `companies/${tenant}/${key}`, record.id), { ...clean, _ord: ord }).catch(() => setSyncStatus("error"));
+        // _by/_at: quem e quando (as regras do banco exigem o próprio usuário e a hora do servidor).
+        setDoc(doc(db, `companies/${tenant}/${key}`, record.id), { ...clean, _ord: ord, _by: uidRef.current, _at: serverTimestamp() }).catch(() => setSyncStatus("error"));
+        logActivity(db, tenant, uidRef.current, key, record.id, isNew ? "create" : "update");
       }
       for (const existing of [...synced.keys()]) {
         if (seen.has(existing)) continue;
         synced.delete(existing);
         ordRef.current.delete(`${key}/${existing}`);
         deleteDoc(doc(db, `companies/${tenant}/${key}`, existing)).catch(() => setSyncStatus("error"));
+        logActivity(db, tenant, uidRef.current, key, existing, "delete");
       }
     }
   }, [state]);

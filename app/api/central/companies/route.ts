@@ -50,6 +50,7 @@ export async function GET() {
       segment: String(data.segment ?? ""),
       plan: String(data.plan ?? "Teste"),
       monthlyFeeCents: Number(data.monthlyFeeCents ?? 0),
+      maxUsers: typeof data.maxUsers === "number" ? data.maxUsers : null,
       users: userCount.get(entry.id) ?? 0,
       accessStatus: data.status === "bloqueado" ? "Bloqueado" : "Ativo",
       billingStatus: String(data.billingStatus ?? "Em dia"),

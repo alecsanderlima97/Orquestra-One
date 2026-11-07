@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFirebaseAdminServices } from "@/src/lib/firebase-admin";
 import { INVITABLE_ROLES, ROLE_CODES } from "@/src/lib/roles";
+import { canAddUser, entitlementsFrom } from "@/src/lib/plans";
 
 export const runtime = "nodejs";
 
@@ -67,6 +68,18 @@ export async function POST(request: NextRequest) {
 
     const pending = await services.firestore.collection("invitations").where("email", "==", email).where("tenantId", "==", tenantId).where("status", "==", "pending").limit(1).get();
     if (!pending.empty) return NextResponse.json({ error: "Já existe um convite pendente para este e-mail." }, { status: 409 });
+
+    // Limite de pessoas da empresa (definido pela Central Admin).
+    const entitlements = entitlementsFrom(companySnapshot.data());
+    if (kind === "team" && entitlements.maxUsers !== null) {
+      const [activeUsers, pendingInvites] = await Promise.all([
+        services.firestore.collection("users").where("tenantId", "==", tenantId).where("active", "==", true).count().get(),
+        services.firestore.collection("invitations").where("tenantId", "==", tenantId).where("status", "==", "pending").count().get(),
+      ]);
+      if (!canAddUser(entitlements, activeUsers.data().count, pendingInvites.data().count)) {
+        return NextResponse.json({ error: `O plano da empresa permite até ${entitlements.maxUsers} pessoas (contando convites pendentes). Fale com o suporte para ampliar.` }, { status: 403 });
+      }
+    }
 
     const uiRole = kind === "owner" ? "Proprietário" : String(body.role);
     const invitation = {

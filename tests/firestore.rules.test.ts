@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
-import { deleteDoc, doc, getDoc, getDocs, collection, setDoc } from "firebase/firestore";
+import { addDoc, deleteDoc, doc, getDoc, getDocs, collection, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { accessForRole } from "../src/lib/roles";
 
 let env: RulesTestEnvironment;
@@ -36,16 +36,17 @@ beforeEach(async () => {
 });
 
 const as = (uid: string) => env.authenticatedContext(uid).firestore();
+const by = (uid: string, data: Record<string, unknown>) => ({ ...data, _by: uid, _at: serverTimestamp() });
 
 describe("isolamento entre empresas", () => {
   it("dono da empresa A lê e grava a própria OS", async () => {
     await assertSucceeds(getDoc(doc(as("dono"), `companies/${A}/workOrders/os1`)));
-    await assertSucceeds(setDoc(doc(as("dono"), `companies/${A}/workOrders/os2`), { client: "Y" }));
+    await assertSucceeds(setDoc(doc(as("dono"), `companies/${A}/workOrders/os2`), by("dono", { client: "Y" })));
   });
   it("dono da empresa B não lê nem grava dados da empresa A", async () => {
     await assertFails(getDoc(doc(as("outra"), `companies/${A}/workOrders/os1`)));
     await assertFails(getDocs(collection(as("outra"), `companies/${A}/finance`)));
-    await assertFails(setDoc(doc(as("outra"), `companies/${A}/workOrders/os9`), { client: "invasor" }));
+    await assertFails(setDoc(doc(as("outra"), `companies/${A}/workOrders/os9`), by("outra", { client: "invasor" })));
   });
   it("visitante sem login não acessa nada", async () => {
     const anon = env.unauthenticatedContext().firestore();
@@ -56,12 +57,12 @@ describe("isolamento entre empresas", () => {
 
 describe("permissões por função", () => {
   it("profissional edita OS mas não vê o financeiro", async () => {
-    await assertSucceeds(setDoc(doc(as("prof"), `companies/${A}/workOrders/os1`), { client: "X", status: "done" }));
+    await assertSucceeds(setDoc(doc(as("prof"), `companies/${A}/workOrders/os1`), by("prof", { client: "X", status: "done" })));
     await assertFails(getDocs(collection(as("prof"), `companies/${A}/finance`)));
   });
   it("visualizador lê mas não grava nem apaga", async () => {
     await assertSucceeds(getDoc(doc(as("visu"), `companies/${A}/finance/f1`)));
-    await assertFails(setDoc(doc(as("visu"), `companies/${A}/finance/f2`), { amountCents: 1 }));
+    await assertFails(setDoc(doc(as("visu"), `companies/${A}/finance/f2`), by("visu", { amountCents: 1 })));
     await assertFails(deleteDoc(doc(as("visu"), `companies/${A}/workOrders/os1`)));
   });
   it("usuário desativado perde todo acesso", async () => {
@@ -92,5 +93,26 @@ describe("dados só do servidor", () => {
   it("plataforma lê a empresa, mas não os dados operacionais", async () => {
     await assertSucceeds(getDoc(doc(as("plataforma"), `companies/${A}`)));
     await assertFails(getDoc(doc(as("plataforma"), `companies/${A}/workOrders/os1`)));
+  });
+});
+
+describe("quem alterou", () => {
+  it("gravação sem carimbo ou em nome de outra pessoa é recusada", async () => {
+    await assertFails(setDoc(doc(as("dono"), `companies/${A}/workOrders/os3`), { client: "sem carimbo" }));
+    await assertFails(setDoc(doc(as("prof"), `companies/${A}/workOrders/os3`), by("dono", { client: "fingindo ser o dono" })));
+    await assertFails(setDoc(doc(as("prof"), `companies/${A}/workOrders/os3`), { client: "hora falsa", _by: "prof", _at: new Date(2020, 0, 1) }));
+    await assertSucceeds(updateDoc(doc(as("prof"), `companies/${A}/workOrders/os1`), by("prof", { status: "waiting" })));
+  });
+  it("histórico: só inclusão, em nome próprio, e só o gestor da equipe lê", async () => {
+    const entry = { actorUid: "prof", collection: "workOrders", docId: "os1", action: "update", at: serverTimestamp() };
+    await assertSucceeds(addDoc(collection(as("prof"), `companies/${A}/activity`), entry));
+    await assertFails(addDoc(collection(as("prof"), `companies/${A}/activity`), { ...entry, actorUid: "dono" }));
+    await assertFails(addDoc(collection(as("prof"), `companies/${A}/activity`), { ...entry, extra: "x" }));
+    await assertFails(addDoc(collection(as("outra"), `companies/${A}/activity`), { ...entry, actorUid: "outra" }));
+    await env.withSecurityRulesDisabled(async (ctx) => { await setDoc(doc(ctx.firestore(), `companies/${A}/activity/h1`), { ...entry, at: new Date() }); });
+    await assertFails(getDoc(doc(as("prof"), `companies/${A}/activity/h1`)));
+    await assertSucceeds(getDoc(doc(as("dono"), `companies/${A}/activity/h1`)));
+    await assertFails(deleteDoc(doc(as("dono"), `companies/${A}/activity/h1`)));
+    await assertFails(setDoc(doc(as("dono"), `companies/${A}/activity/h1`), { ...entry, actorUid: "dono", action: "delete" }));
   });
 });
