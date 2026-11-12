@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import {
   Activity, ArrowDownRight, ArrowUpDown, ArrowUpRight, Bell, Boxes, Building2, CalendarClock, CalendarDays,
   CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, ClipboardList, Clock3, FileBarChart,
@@ -14,6 +14,7 @@ import { useDemoData, type AppointmentPatch, type AppointmentRecord, type Client
 import { RecordDialog, type RecordKind } from "@/src/components/record-dialog";
 import { VoiceDictationButton } from "@/src/components/voice-input";
 import { signOutOfOne } from "@/src/lib/firebase-client";
+import { AssistantGuide } from "@/src/components/assistant-guide";
 import { NotificationPermissionButton, useAppointmentNotifications, useUpcomingAppointments } from "@/src/components/reminders";
 import { EmptyState, PanelHeader, StatusPill, WhatsAppLink, type Status } from "@/src/components/ui-parts";
 import { OrdersView } from "@/src/components/orders-view";
@@ -172,17 +173,18 @@ export function OperationalDashboard() {
   const greeting = hour === undefined ? "Olá" : hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
   const copy = activeSection === "overview" ? { ...sectionCopy.overview, title: `${greeting}, Alecsander` } : sectionCopy[activeSection];
 
-  function navigate(section: SectionId) { setActiveSection(section); setQuickOpen(false); setMobileMenuOpen(false); }
+  const navigate = useCallback((section: SectionId) => { setActiveSection(section); setQuickOpen(false); setMobileMenuOpen(false); }, []);
   function open(kind: RecordKind, orderId?: string) { setWorkOrderId(orderId); setDialog(kind); setQuickOpen(false); }
   const [slotPrefill, setSlotPrefill] = useState<{ date: string; time: string }>();
   function createAppointmentAt(date: string, time: string) { setSlotPrefill({ date, time }); open("appointment"); }
   function createOrderFromAppointment(appointment: AppointmentRecord) { setOrderLink({ appointmentId: appointment.id, clientId: appointment.clientId, service: appointment.service, description: appointment.notes }); open("order"); }
 
   return <div className="app-shell">
+    <AssistantGuide activeSection={activeSection} onNavigate={navigate} />
     <aside className={`sidebar ${mobileMenuOpen ? "sidebar-open" : ""}`}>
       <div className="brand-lockup"><div className="brand-mark"><span /><span /><span /></div><div><strong>orquestra<span>.</span></strong><small>ONE</small></div></div>
       <button className="workspace-switcher" type="button" onClick={() => navigate("settings")}><span className="workspace-avatar">EC</span><span className="workspace-copy"><strong>Empresa Central</strong><small>Workspace principal</small></span><ChevronDown size={16} /></button>
-      <div className="nav-label">Navegação</div><nav className="main-nav" aria-label="Navegação principal">{navigation.map(({ id, label, icon: Icon }) => <button key={id} type="button" className={`nav-item ${activeSection === id ? "nav-item-active" : ""}`} onClick={() => navigate(id)}><Icon size={18} strokeWidth={activeSection === id ? 2.25 : 1.8} /><span>{label}</span>{id === "agenda" && <em>{todayAppointments}</em>}</button>)}</nav>
+      <div className="nav-label">Navegação</div><nav className="main-nav" aria-label="Navegação principal">{navigation.map(({ id, label, icon: Icon }) => <button key={id} data-tour={id} type="button" className={`nav-item ${activeSection === id ? "nav-item-active" : ""}`} onClick={() => navigate(id)}><Icon size={18} strokeWidth={activeSection === id ? 2.25 : 1.8} /><span>{label}</span>{id === "agenda" && <em>{todayAppointments}</em>}</button>)}</nav>
       <div className="sidebar-spacer" /><div className="sidebar-note"><Sparkles size={16} /><span>Dados operacionais ficam conectados.<br /><strong>Feche a OS sem retrabalho.</strong></span></div>
       <a className="nav-item nav-settings" href="/central-admin"><ShieldCheck size={18} /><span>Central Admin</span></a><button className={`nav-item nav-settings ${activeSection === "settings" ? "nav-item-active" : ""}`} type="button" onClick={() => navigate("settings")}><Settings2 size={18} /><span>Configurações</span></button>{data.syncStatus !== "demo" && <button className="nav-item nav-settings" type="button" onClick={() => void signOutOfOne()}><LogOut size={18} /><span>Sair</span></button>}<div className="sidebar-footer"><ShieldCheck size={14} /> Base preparada para tenant</div>
     </aside>
