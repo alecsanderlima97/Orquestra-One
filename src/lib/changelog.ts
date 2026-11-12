@@ -10,7 +10,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "12/11/2026",
     title: "Assistente e ordem de serviço completa",
     items: [
-      "Assistente: botão Ajuda no canto da tela, com tour pelas abas, dicas de cada tela e as novidades.",
+      "Assistente: botão Ajuda no canto da tela, com vídeo explicativo, tour pelas abas, dicas de cada tela e as novidades.",
       "Ordem de serviço em PDF, com fotos e assinatura do cliente.",
       "Fotos e PDFs anexados na O.S. (antes e depois do serviço).",
       "Assinatura do cliente na tela, com o dedo ou o mouse.",

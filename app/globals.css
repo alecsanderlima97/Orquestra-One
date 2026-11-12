@@ -72,3 +72,5 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .assistant-spotlight { transition: none; } }
 @media print { .assistant-fab, .assistant-panel, .assistant-tour { display: none !important; } }
 @media (max-width: 900px) { .assistant-fab { bottom: 86px; padding: 10px 14px; } .assistant-panel { bottom: 140px; } .assistant-tour-card { bottom: 90px; } }
+.assistant-video { width: min(980px, calc(100vw - 32px)); max-width: none; }
+.assistant-video video { display: block; width: 100%; border-radius: 10px; background: #000; aspect-ratio: 16 / 9; }
