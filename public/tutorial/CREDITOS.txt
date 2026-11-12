@@ -1,0 +1,3 @@
+Narração sintética gerada com Piper (https://github.com/rhasspy/piper), voz "pt-br-edresson-low".
+Dados de voz: TTS-Portuguese-Corpus (Edresson Casanova) — licença CC BY 4.0
+https://github.com/Edresson/TTS-Portuguese-Corpus
