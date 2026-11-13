@@ -1,3 +1,2 @@
-Narração sintética gerada com Piper (https://github.com/rhasspy/piper), voz "pt-br-edresson-low".
-Dados de voz: TTS-Portuguese-Corpus (Edresson Casanova) — licença CC BY 4.0
-https://github.com/Edresson/TTS-Portuguese-Corpus
+Narração sintética gerada com Kokoro TTS (modelo Kokoro-82M, licença Apache 2.0), voz "pf_dora" (português do Brasil),
+executado com kokoro-onnx (https://github.com/thewh1teagle/kokoro-onnx).
