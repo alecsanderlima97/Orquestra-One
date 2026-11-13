@@ -2,6 +2,8 @@
 
 O One não deve criar uma segunda base de empresas, planos, cobrança ou `accessStatus`. O Portal Orquestra.cs é a fonte de verdade comercial.
 
+> **Atualização (nov/2026):** o One passou a ter Firebase próprio (ver `.env.example`). Empresas, plano, limite de pessoas e acesso agora ficam no Firestore do One e são editados pela Central Admin, com motivo e auditoria. Este documento descreve a integração anterior com o Portal e precisa ser revisto.
+
 ## Fluxo de convite
 
 1. A Central Admin cria o convite do proprietário, vinculado ao tenant do Portal e com expiração.

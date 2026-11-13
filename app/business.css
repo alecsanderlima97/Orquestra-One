@@ -61,10 +61,27 @@
   .summary-textarea { min-height: 240px; font-size: 14px; }
   .view-toolbar { flex-wrap: wrap; }
   .orders-table .table-head { display: none; }
-  .orders-table .order-row { grid-template-columns: 52px minmax(0, 1fr) auto; row-gap: 8px; }
-  .orders-table .order-info { text-align: left; }
-  .operational-order-row .status-pill { display: inline-flex; grid-column: 2 / -1; justify-self: start; }
-  .orders-table .order-row > .row-actions { grid-column: 1 / -1; }
+  .orders-table .order-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "info amount" "id status" "actions actions"; row-gap: 8px; column-gap: 10px; align-items: start; }
+  .orders-table .order-row > .order-info { grid-area: info; text-align: left; }
+  .orders-table .order-row > .order-amount { grid-area: amount; text-align: right; }
+  .orders-table .order-row > .order-id { grid-area: id; align-self: center; }
+  .orders-table .order-row > .status-pill { grid-area: status; display: inline-flex; justify-self: end; }
+  .orders-table .order-row > .row-actions { grid-area: actions; }
   .stock-list .stock-row { flex-wrap: wrap; }
   .stock-list .stock-row > .row-actions, .finance-list .finance-row > .row-actions { flex-basis: 100%; }
+}
+
+/* Orçamentos */
+.status-overdue { color: #a5483c; background: #fdecea; }
+.status-overdue .status-dot { background: #d8685a; }
+.quote-items { display: grid; gap: 10px; margin: 14px 0; }
+.quote-items h4 { margin: 0; font-size: 12px; }
+.quote-item-row { display: grid; grid-template-columns: minmax(0, 1fr) 70px 100px 34px; gap: 8px; align-items: end; }
+.quote-lines { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 6px; }
+.quote-lines li { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; border-bottom: 1px solid #f0f2f5; padding-bottom: 6px; }
+.quote-total { margin: 8px 0 0; font-size: 14px; text-align: right; }
+@media (max-width: 760px) {
+  .quote-item-row { grid-template-columns: 1fr 1fr; }
+  .quote-item-row > label:first-child { grid-column: 1 / -1; }
+  .quote-item-row > .icon-button { justify-self: end; }
 }

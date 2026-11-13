@@ -1,19 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import {
   Activity, ArrowDownRight, ArrowUpDown, ArrowUpRight, Bell, Boxes, Building2, CalendarClock, CalendarDays,
   CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, ClipboardList, Clock3, FileBarChart,
   FilePlus2, LayoutDashboard, MapPin, Menu, PackageCheck, Plus, Search, Settings2,
   MessageCircle, ShieldCheck, Sparkles, UserCog, Users, WalletCards, Wrench, X, type LucideIcon,
+  FileText, LogOut,
 } from "lucide-react";
 import { formatBRL } from "@/src/domain/money";
 import type { SectionId } from "@/src/domain/types";
 import { useDemoData, type AppointmentPatch, type AppointmentRecord, type ClientRecord, type FinanceRecord, type WorkOrderRecord } from "@/src/components/demo-data";
 import { RecordDialog, type RecordKind } from "@/src/components/record-dialog";
 import { VoiceDictationButton } from "@/src/components/voice-input";
+import { signOutOfOne } from "@/src/lib/firebase-client";
+import { AssistantGuide } from "@/src/components/assistant-guide";
+import { NotificationPermissionButton, useAppointmentNotifications, useUpcomingAppointments } from "@/src/components/reminders";
 import { EmptyState, PanelHeader, StatusPill, WhatsAppLink, type Status } from "@/src/components/ui-parts";
 import { OrdersView } from "@/src/components/orders-view";
+import { QuotesView } from "@/src/components/quotes-view";
 import { FinanceView } from "@/src/components/finance-view";
 import { StockView } from "@/src/components/stock-view";
 import { ClientsView, SuppliersView } from "@/src/components/people-views";
@@ -24,7 +29,7 @@ import { endTime, findConflicts, lengthMinutes, startMinutes, timeRange, todayDa
 
 const navigation: Array<{ id: Exclude<SectionId, "settings">; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Visão geral", icon: LayoutDashboard }, { id: "agenda", label: "Agenda", icon: CalendarDays },
-  { id: "orders", label: "Ordens de serviço", icon: ClipboardList }, { id: "finance", label: "Financeiro", icon: WalletCards },
+  { id: "quotes", label: "Orçamentos", icon: FileText }, { id: "orders", label: "Ordens de serviço", icon: ClipboardList }, { id: "finance", label: "Financeiro", icon: WalletCards },
   { id: "stock", label: "Estoque e ferramentas", icon: Boxes }, { id: "clients", label: "Clientes", icon: Users },
   { id: "suppliers", label: "Fornecedores", icon: Building2 }, { id: "reports", label: "Relatórios", icon: FileBarChart },
   { id: "team", label: "Equipe", icon: UserCog },
@@ -33,6 +38,7 @@ const navigation: Array<{ id: Exclude<SectionId, "settings">; label: string; ico
 const sectionCopy: Record<SectionId, { eyebrow: string; title: string; description: string }> = {
   overview: { eyebrow: "Operação de hoje", title: "Bom dia, Alecsander", description: "Agenda, serviços e financeiro conectados para uma rotina mais leve." },
   agenda: { eyebrow: "Agenda de serviços", title: "O dia no seu ritmo", description: "Agendamentos já trazem cliente, endereço e contexto para a ordem de serviço." },
+  quotes: { eyebrow: "Vendas", title: "Orçamentos", description: "Monte, envie pelo WhatsApp e transforme em ordem de serviço quando o cliente aprovar." },
   orders: { eyebrow: "Operação", title: "Ordens de serviço", description: "Registre a execução, materiais e fechamento no mesmo fluxo." },
   finance: { eyebrow: "Controle financeiro", title: "Dinheiro com contexto", description: "Receitas, despesas e fechamentos vinculados aos serviços." },
   stock: { eyebrow: "Materiais e ferramentas", title: "Seu estoque sob controle", description: "A baixa é feita apenas no fechamento confirmado da OS." },
@@ -167,26 +173,27 @@ export function OperationalDashboard() {
   const greeting = hour === undefined ? "Olá" : hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
   const copy = activeSection === "overview" ? { ...sectionCopy.overview, title: `${greeting}, Alecsander` } : sectionCopy[activeSection];
 
-  function navigate(section: SectionId) { setActiveSection(section); setQuickOpen(false); setMobileMenuOpen(false); }
+  const navigate = useCallback((section: SectionId) => { setActiveSection(section); setQuickOpen(false); setMobileMenuOpen(false); }, []);
   function open(kind: RecordKind, orderId?: string) { setWorkOrderId(orderId); setDialog(kind); setQuickOpen(false); }
   const [slotPrefill, setSlotPrefill] = useState<{ date: string; time: string }>();
   function createAppointmentAt(date: string, time: string) { setSlotPrefill({ date, time }); open("appointment"); }
   function createOrderFromAppointment(appointment: AppointmentRecord) { setOrderLink({ appointmentId: appointment.id, clientId: appointment.clientId, service: appointment.service, description: appointment.notes }); open("order"); }
 
   return <div className="app-shell">
+    <AssistantGuide activeSection={activeSection} onNavigate={navigate} />
     <aside className={`sidebar ${mobileMenuOpen ? "sidebar-open" : ""}`}>
       <div className="brand-lockup"><div className="brand-mark"><span /><span /><span /></div><div><strong>orquestra<span>.</span></strong><small>ONE</small></div></div>
       <button className="workspace-switcher" type="button" onClick={() => navigate("settings")}><span className="workspace-avatar">EC</span><span className="workspace-copy"><strong>Empresa Central</strong><small>Workspace principal</small></span><ChevronDown size={16} /></button>
-      <div className="nav-label">Navegação</div><nav className="main-nav" aria-label="Navegação principal">{navigation.map(({ id, label, icon: Icon }) => <button key={id} type="button" className={`nav-item ${activeSection === id ? "nav-item-active" : ""}`} onClick={() => navigate(id)}><Icon size={18} strokeWidth={activeSection === id ? 2.25 : 1.8} /><span>{label}</span>{id === "agenda" && <em>{todayAppointments}</em>}</button>)}</nav>
+      <div className="nav-label">Navegação</div><nav className="main-nav" aria-label="Navegação principal">{navigation.map(({ id, label, icon: Icon }) => <button key={id} data-tour={id} type="button" className={`nav-item ${activeSection === id ? "nav-item-active" : ""}`} onClick={() => navigate(id)}><Icon size={18} strokeWidth={activeSection === id ? 2.25 : 1.8} /><span>{label}</span>{id === "agenda" && <em>{todayAppointments}</em>}</button>)}</nav>
       <div className="sidebar-spacer" /><div className="sidebar-note"><Sparkles size={16} /><span>Dados operacionais ficam conectados.<br /><strong>Feche a OS sem retrabalho.</strong></span></div>
-      <a className="nav-item nav-settings" href="/central-admin"><ShieldCheck size={18} /><span>Central Admin</span></a><button className={`nav-item nav-settings ${activeSection === "settings" ? "nav-item-active" : ""}`} type="button" onClick={() => navigate("settings")}><Settings2 size={18} /><span>Configurações</span></button><div className="sidebar-footer"><ShieldCheck size={14} /> Base preparada para tenant</div>
+      <a className="nav-item nav-settings" href="/central-admin"><ShieldCheck size={18} /><span>Central Admin</span></a><button className={`nav-item nav-settings ${activeSection === "settings" ? "nav-item-active" : ""}`} type="button" onClick={() => navigate("settings")}><Settings2 size={18} /><span>Configurações</span></button>{data.syncStatus !== "demo" && <button className="nav-item nav-settings" type="button" onClick={() => void signOutOfOne()}><LogOut size={18} /><span>Sair</span></button>}<div className="sidebar-footer"><ShieldCheck size={14} /> Base preparada para tenant</div>
     </aside>
     {mobileMenuOpen && <button className="sidebar-backdrop" aria-label="Fechar menu" onClick={() => setMobileMenuOpen(false)} />}
     <main className="main-content"><header className="topbar"><div className="topbar-left"><button className="icon-button menu-trigger" type="button" onClick={() => setMobileMenuOpen(true)} aria-label="Abrir menu"><Menu size={20} /></button><span className="topbar-context">Workspace <ChevronRight size={14} /> <strong>Empresa Central</strong></span></div><div className="topbar-actions"><GlobalSearch onNavigate={navigate} /><NotificationBell onNavigate={navigate} /><div className="topbar-user" role="button" tabIndex={0} onClick={() => navigate("settings")} onKeyDown={(event) => { if (event.key === "Enter") navigate("settings"); }}><span className="user-avatar">AL</span><span className="user-name">Alecsander Lima</span><ChevronDown size={15} /></div></div></header>
       <div className="page-wrap"><div className="page-heading"><div><p className="eyebrow">{copy.eyebrow}</p><h1>{copy.title}</h1><p className="page-description">{copy.description}</p></div><div className="heading-actions"><button className="secondary-button" type="button" onClick={() => navigate("agenda")}><CalendarClock size={17} /> Hoje</button><button className="primary-button" type="button" onClick={() => setQuickOpen((value) => !value)}><Plus size={18} /> Novo registro</button></div></div>
       {quickOpen && <QuickActions onOpen={open} onClose={() => setQuickOpen(false)} />}
       {activeSection === "overview" && <Overview onNavigate={navigate} onOpen={open} />}
-      {activeSection === "agenda" && <AgendaView onOpen={open} onCreateOrder={createOrderFromAppointment} onCreateAt={createAppointmentAt} />}{activeSection === "orders" && <OrdersView onOpen={open} />}{activeSection === "finance" && <FinanceView onOpen={open} />}{activeSection === "stock" && <StockView onOpen={open} />}{activeSection === "clients" && <ClientsView onOpen={open} />}{activeSection === "suppliers" && <SuppliersView onOpen={open} />}{activeSection === "reports" && <ReportsView />}{activeSection === "team" && <TeamView />}{activeSection === "settings" && <SettingsView />}
+      {activeSection === "agenda" && <AgendaView onOpen={open} onCreateOrder={createOrderFromAppointment} onCreateAt={createAppointmentAt} />}{activeSection === "quotes" && <QuotesView onGoToOrders={() => navigate("orders")} />}{activeSection === "orders" && <OrdersView onOpen={open} />}{activeSection === "finance" && <FinanceView onOpen={open} />}{activeSection === "stock" && <StockView onOpen={open} />}{activeSection === "clients" && <ClientsView onOpen={open} />}{activeSection === "suppliers" && <SuppliersView onOpen={open} />}{activeSection === "reports" && <ReportsView />}{activeSection === "team" && <TeamView />}{activeSection === "settings" && <SettingsView />}
       </div></main>
     <nav className="mobile-nav" aria-label="Navegação mobile">{navigation.slice(0, 5).map(({ id, label, icon: Icon }) => <button key={id} type="button" className={activeSection === id ? "mobile-nav-active" : ""} onClick={() => navigate(id)}><Icon size={19} /><span>{label.split(" ")[0]}</span></button>)}</nav>
     {dialog && <RecordDialog kind={dialog} workOrderId={workOrderId} prefill={dialog === "order" ? orderLink : dialog === "appointment" ? slotPrefill : undefined} onOrderCreated={dialog === "order" && orderLink ? (orderId) => data.updateAppointment(orderLink.appointmentId, { workOrderId: orderId }) : undefined} onClose={() => { setDialog(null); setOrderLink(undefined); setSlotPrefill(undefined); }} />}
@@ -234,7 +241,9 @@ function NotificationBell({ onNavigate }: { onNavigate: (section: SectionId) => 
   const [open, setOpen] = useState(false);
   const [today, setToday] = useState("");
   useEffect(() => { setToday(todayDate()); }, []);
-  const alerts: NavigationHit[] = [];
+  const upcoming = useUpcomingAppointments(data.appointments);
+  useAppointmentNotifications(upcoming);
+  const alerts: NavigationHit[] = upcoming.map((item) => ({ key: `up-${item.id}`, label: `Começa às ${item.time}: ${item.client}`, hint: `${item.service} · ${item.professional}`, section: "agenda" as SectionId }));
   if (today) {
     data.appointments.filter((item) => item.date === today && item.status === "pending").forEach((item) => alerts.push({ key: `ag-${item.id}`, label: `Confirmar ${item.client} às ${item.time}`, hint: "Agenda de hoje", section: "agenda" }));
     data.finance.filter((item) => financeStatus(item, today) === "overdue").forEach((item) => alerts.push({ key: `fv-${item.id}`, label: `Vencido: ${item.title}`, hint: `${item.party} · ${formatBRL(item.amountCents)}`, section: "finance" }));
@@ -246,7 +255,7 @@ function NotificationBell({ onNavigate }: { onNavigate: (section: SectionId) => 
   return <div className="notification-wrap">
     <button className="icon-button notification-button" type="button" aria-label={alerts.length ? `Notificações (${alerts.length})` : "Notificações"} aria-expanded={open} onClick={() => setOpen((value) => !value)}><Bell size={19} />{alerts.length > 0 && <span />}</button>
     {open && <button className="popover-backdrop" type="button" aria-label="Fechar notificações" onClick={() => setOpen(false)} />}
-    {open && <div className="notification-popover" role="dialog" aria-label="Notificações"><h3>{alerts.length ? "Precisa da sua atenção" : "Tudo em dia"}</h3>{alerts.length ? <ul>{alerts.slice(0, 8).map((alert) => <li key={alert.key}><button type="button" onClick={() => { onNavigate(alert.section); setOpen(false); }}><strong>{alert.label}</strong><small>{alert.hint}</small></button></li>)}</ul> : <p className="notification-empty">Sem pendências de agenda, financeiro ou estoque.</p>}</div>}
+    {open && <div className="notification-popover" role="dialog" aria-label="Notificações"><h3>{alerts.length ? "Precisa da sua atenção" : "Tudo em dia"}</h3>{alerts.length ? <ul>{alerts.slice(0, 8).map((alert) => <li key={alert.key}><button type="button" onClick={() => { onNavigate(alert.section); setOpen(false); }}><strong>{alert.label}</strong><small>{alert.hint}</small></button></li>)}</ul> : <p className="notification-empty">Sem pendências de agenda, financeiro ou estoque.</p>}<NotificationPermissionButton /></div>}
   </div>;
 }
 

@@ -20,3 +20,17 @@ export async function getPlatformSession() {
   const profile = (await services.firestore.doc(`users/${identity.uid}`).get()).data();
   return profile && ["platform_owner", "orquestra_admin"].includes(String(profile.role)) && profile.active === true ? { identity, profile } : null;
 }
+
+export async function getOneProfile() {
+  const identity = await getOneSession();
+  const services = getFirebaseAdminServices();
+  if (!identity || !services) return null;
+  const profile = (await services.firestore.doc(`users/${identity.uid}`).get()).data();
+  if (!profile || profile.active !== true) return null;
+  return {
+    identity,
+    role: String(profile.role ?? ""),
+    name: String(profile.name ?? ""),
+    tenantId: typeof profile.tenantId === "string" ? profile.tenantId : undefined,
+  };
+}

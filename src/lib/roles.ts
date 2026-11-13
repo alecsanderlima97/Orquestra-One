@@ -63,3 +63,33 @@ export function isGoogleAccount(email: string) {
 export function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
 }
+
+/** Código técnico gravado em users/{uid}.role para cada função da tela. */
+export const ROLE_CODES: Record<string, string> = {
+  Proprietário: "company_owner",
+  Administrador: "company_admin",
+  Financeiro: "company_user",
+  Profissional: "company_user",
+  Auxiliar: "company_user",
+  Visualizador: "viewer",
+};
+
+/** Mapa de acesso por área de uma função. Função desconhecida = nenhum acesso. */
+export function accessForRole(uiRole: string): Record<PermissionArea, AccessLevel> {
+  const preset = ROLE_PRESETS[uiRole];
+  if (preset) return { ...preset.access };
+  return Object.fromEntries(PERMISSION_AREAS.map((area) => [area.id, "none"])) as Record<PermissionArea, AccessLevel>;
+}
+
+/** Coleção do banco da empresa → área de permissão que controla a leitura e a escrita. */
+export const COLLECTION_AREA = {
+  appointments: "agenda",
+  workOrders: "orders",
+  quotes: "orders",
+  finance: "finance",
+  stock: "stock",
+  stockMovements: "stock",
+  clients: "clients",
+  suppliers: "suppliers",
+  team: "team",
+} as const satisfies Record<string, PermissionArea>;

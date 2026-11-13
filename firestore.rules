@@ -1,0 +1,133 @@
+rules_version = '2';
+
+// Orquestra One — banco próprio. Cada empresa só enxerga os dados da própria empresa,
+// e dentro dela só o que a função permite (users/{uid}.access, definido no aceite do convite).
+// users / companies / team / invitations / audit só são gravados pelo servidor (Admin SDK ignora estas regras).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasProfile() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isPlatform() {
+      return hasProfile() && profile().active == true && profile().role in ['platform_owner', 'orquestra_admin'];
+    }
+
+    function inTenant(tenantId) {
+      return hasProfile() && profile().active == true && profile().tenantId == tenantId;
+    }
+
+    // Nível da pessoa numa área: 'none' | 'view' | 'edit'. Sem mapa de acesso = nenhum.
+    function level(area) {
+      return profile().access[area];
+    }
+
+    function canRead(tenantId, area) {
+      return inTenant(tenantId) && level(area) in ['view', 'edit'];
+    }
+
+    function canEdit(tenantId, area) {
+      return inTenant(tenantId) && level(area) == 'edit';
+    }
+
+    // Toda gravação registra quem (_by = o próprio usuário) e quando (_at = hora do servidor).
+    function stamped() {
+      return request.resource.data._by == request.auth.uid && request.resource.data._at == request.time;
+    }
+
+    function canWrite(tenantId, area) {
+      return canEdit(tenantId, area) && stamped();
+    }
+
+    // Cada usuário lê o próprio perfil. Nunca grava pelo navegador.
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isPlatform());
+      allow write: if false;
+    }
+
+    match /companies/{tenantId} {
+      allow read: if inTenant(tenantId) || isPlatform();
+      allow write: if false;
+
+      match /appointments/{docId} {
+        allow read: if canRead(tenantId, 'agenda');
+        allow create, update: if canWrite(tenantId, 'agenda');
+        allow delete: if canEdit(tenantId, 'agenda');
+      }
+      match /workOrders/{docId} {
+        allow read: if canRead(tenantId, 'orders');
+        allow create, update: if canWrite(tenantId, 'orders');
+        allow delete: if canEdit(tenantId, 'orders');
+      }
+      match /quotes/{docId} {
+        allow read: if canRead(tenantId, 'orders');
+        allow create, update: if canWrite(tenantId, 'orders');
+        allow delete: if canEdit(tenantId, 'orders');
+      }
+      match /finance/{docId} {
+        allow read: if canRead(tenantId, 'finance');
+        allow create, update: if canWrite(tenantId, 'finance');
+        allow delete: if canEdit(tenantId, 'finance');
+      }
+      match /stock/{docId} {
+        allow read: if canRead(tenantId, 'stock');
+        allow create, update: if canWrite(tenantId, 'stock');
+        allow delete: if canEdit(tenantId, 'stock');
+      }
+      match /stockMovements/{docId} {
+        allow read: if canRead(tenantId, 'stock');
+        allow create, update: if canWrite(tenantId, 'stock');
+        allow delete: if canEdit(tenantId, 'stock');
+      }
+      match /clients/{docId} {
+        allow read: if canRead(tenantId, 'clients');
+        allow create, update: if canWrite(tenantId, 'clients');
+        allow delete: if canEdit(tenantId, 'clients');
+      }
+      match /suppliers/{docId} {
+        allow read: if canRead(tenantId, 'suppliers');
+        allow create, update: if canWrite(tenantId, 'suppliers');
+        allow delete: if canEdit(tenantId, 'suppliers');
+      }
+      // Equipe muda só pelo servidor (/api/team), que altera junto o acesso real em users/{uid}.
+      match /team/{docId} {
+        allow read: if canRead(tenantId, 'team');
+        allow write: if false;
+      }
+      // Histórico de alterações: só inclusão, sempre em nome do próprio usuário, nunca editado ou apagado.
+      match /activity/{docId} {
+        allow read: if inTenant(tenantId) && level('team') == 'edit';
+        allow create: if inTenant(tenantId)
+          && request.resource.data.keys().hasOnly(['actorUid', 'collection', 'docId', 'action', 'at'])
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.at == request.time
+          && request.resource.data.action in ['create', 'update', 'delete']
+          && request.resource.data.collection is string && request.resource.data.docId is string
+          && request.resource.data.docId.size() <= 128;
+        allow update, delete: if false;
+      }
+      match /audit/{docId} {
+        allow read: if inTenant(tenantId) && level('team') == 'edit';
+        allow write: if false;
+      }
+    }
+
+    // Convites: só o servidor lê e grava.
+    match /invitations/{id} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

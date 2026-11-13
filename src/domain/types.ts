@@ -1,4 +1,4 @@
-export type SectionId = "overview" | "agenda" | "orders" | "finance" | "stock" | "clients" | "suppliers" | "reports" | "team" | "settings";
+export type SectionId = "overview" | "agenda" | "quotes" | "orders" | "finance" | "stock" | "clients" | "suppliers" | "reports" | "team" | "settings";
 
 export type AppointmentStatus = "confirmed" | "pending" | "in_progress";
 

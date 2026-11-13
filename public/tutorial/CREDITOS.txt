@@ -1,0 +1,2 @@
+Narração sintética gerada com Kokoro TTS (modelo Kokoro-82M, licença Apache 2.0), voz "pf_dora" (português do Brasil),
+executado com kokoro-onnx (https://github.com/thewh1teagle/kokoro-onnx).

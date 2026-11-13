@@ -1,5 +1,6 @@
 import { getApp, getApps, initializeApp, type FirebaseOptions } from "firebase/app";
-import { getAuth, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect } from "firebase/auth";
+import { clearIndexedDbPersistence, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, terminate, type Firestore } from "firebase/firestore";
+import { getAuth, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut } from "firebase/auth";
 
 const config: FirebaseOptions = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -65,4 +66,44 @@ export async function getCurrentFirebaseUserToken() {
   const app = getFirebaseApp();
   const user = getAuth(app).currentUser;
   return user ? user.getIdToken() : null;
+}
+
+let firestoreInstance: Firestore | null = null;
+
+/** Banco com cache no aparelho: lê sem internet e envia as alterações quando a conexão volta. */
+export function getFirestoreDb() {
+  if (!firestoreInstance) {
+    const app = getFirebaseApp();
+    try {
+      firestoreInstance = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+    } catch {
+      firestoreInstance = initializeFirestore(app, {});
+    }
+  }
+  return firestoreInstance;
+}
+
+/** Espera o Firebase restaurar o login do navegador (null = ninguém entrou). */
+export function waitForFirebaseUser() {
+  const auth = getAuth(getFirebaseApp());
+  return new Promise<import("firebase/auth").User | null>((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => { unsubscribe(); resolve(user); });
+  });
+}
+
+/** Sai do One: apaga a sessão do servidor e o login Google deste navegador. */
+export async function signOutOfOne() {
+  await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+  if (isFirebaseClientConfigured) {
+    await signOut(getAuth(getFirebaseApp())).catch(() => undefined);
+    // Apaga a cópia local dos dados da empresa (aparelho pode ser compartilhado).
+    if (firestoreInstance) {
+      const db = firestoreInstance;
+      firestoreInstance = null;
+      await terminate(db).catch(() => undefined);
+      await clearIndexedDbPersistence(db).catch(() => undefined);
+    }
+  }
+  if ("caches" in window) await caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))).catch(() => undefined);
+  window.location.href = "/login";
 }
